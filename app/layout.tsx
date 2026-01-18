@@ -15,7 +15,7 @@ const playfair = Playfair_Display({
 
 export const metadata: Metadata = {
   title: 'Church in Komoka',
-  description: 'A spiritual family living life together, bearing one another\'s burdens, and growing in grace.',
+  description: 'A Spiritual family living life together, bearing one another\'s burdens, and growing in grace.',
 };
 
 export default function RootLayout({
