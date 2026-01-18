@@ -1,13 +1,46 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { Clock, Youtube, ArrowRight, PlayCircle, Music, ChevronRight } from 'lucide-react';
 import { SectionHeader } from '@/src/components/SectionHeader';
 import { EventRow } from '@/src/components/EventRow';
-import { eventsData, sermonsData } from '@/src/lib/data';
+import { sermonsData } from '@/src/lib/data';
+
+type EventForDisplay = {
+  id: string;
+  title: string;
+  description?: string;
+  category: string;
+  location: string;
+  time?: string;
+  displayDate: string;
+  isRecurring: boolean;
+};
 
 export default function HomePage() {
+  const [featuredEvents, setFeaturedEvents] = useState<EventForDisplay[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchUpcomingEvents();
+  }, []);
+
+  const fetchUpcomingEvents = async () => {
+    try {
+      const res = await fetch('/api/events/upcoming?limit=5');
+      const data = await res.json();
+      // Filter out Service category events and limit to 3
+      const events = (data.events || []).filter((e: EventForDisplay) => e.category !== "Service").slice(0, 3);
+      setFeaturedEvents(events);
+    } catch (error) {
+      console.error('Error fetching events:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const whatToExpectData = [
     {
       title: "Public Reading of Scripture",
@@ -36,7 +69,6 @@ export default function HomePage() {
     }
   ];
 
-  const featuredEvents = eventsData.filter(e => e.category !== "Service").slice(0, 3);
   const latestSermon = sermonsData[0];
 
   return (
@@ -186,9 +218,19 @@ export default function HomePage() {
             </div>
 
             <div className="flex flex-col gap-4">
-                {featuredEvents.map((event) => (
-                    <EventRow key={event.id} event={event} />
-                ))}
+                {loading ? (
+                  <p className="text-stone-500 text-center py-8">Loading events...</p>
+                ) : featuredEvents.length > 0 ? (
+                  featuredEvents.map((event) => (
+                    <EventRow key={event.id} event={{
+                      ...event,
+                      date: event.displayDate,
+                      day: event.displayDate.split(',')[0] || 'Sun',
+                    }} />
+                  ))
+                ) : (
+                  <p className="text-stone-500 text-center py-8">No upcoming events</p>
+                )}
             </div>
              
              <div className="mt-12 md:hidden">

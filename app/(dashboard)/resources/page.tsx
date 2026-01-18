@@ -1,18 +1,56 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { PlayCircle, Youtube, Music, ChevronRight } from 'lucide-react';
 import { SectionHeader } from '@/src/components/SectionHeader';
-import { sermonsData } from '@/src/lib/data';
+
+type Sermon = {
+  id: string;
+  title: string;
+  speaker: string;
+  date: string;
+  thumbnail?: string;
+  youtubeId?: string;
+  spotifyLink?: string;
+  articleContent?: {
+    intro: string;
+    paragraphs: string[];
+    takeaways: string[];
+  };
+  isPublic: boolean;
+};
 
 export default function ResourcesPage() {
+  const [sermons, setSermons] = useState<Sermon[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchSermons();
+  }, []);
+
+  const fetchSermons = async () => {
+    try {
+      const res = await fetch('/api/sermons');
+      const data = await res.json();
+      setSermons(data.sermons || []);
+    } catch (error) {
+      console.error('Error fetching sermons:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-stone-50 pt-24">
       <div className="max-w-[1400px] mx-auto px-6 md:px-12 py-12 md:py-20">
          <SectionHeader title="Resources" />
 
-         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {sermonsData.map((sermon) => (
+         {loading ? (
+           <p className="text-stone-500 text-center py-8">Loading sermons...</p>
+         ) : sermons.length > 0 ? (
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {sermons.map((sermon) => (
                 <Link key={sermon.id} href={`/resources/${sermon.id}`} className="group bg-white rounded-2xl overflow-hidden border border-stone-100 shadow-sm hover:shadow-xl transition-all duration-300">
                 <div className="aspect-video bg-stone-200 relative overflow-hidden">
                     <img src={sermon.thumbnail} alt={sermon.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -41,7 +79,10 @@ export default function ResourcesPage() {
                 </div>
                 </Link>
             ))}
-         </div>
+           </div>
+         ) : (
+           <p className="text-stone-500 text-center py-8">No sermons available</p>
+         )}
       </div>
     </div>
   );

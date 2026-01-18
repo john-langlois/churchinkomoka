@@ -1,7 +1,7 @@
 import { NextAuthConfig, User } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { verifyOTPCode } from "@/src/services/otpService";
-import { getOrCreateProfileByIdentifier, checkIsAdmin } from "@/src/services/profileService";
+import { getProfileByIdentifier, checkIsAdmin } from "@/src/services/profileService";
 
 export default {
   secret: process.env.AUTH_SECRET,
@@ -15,22 +15,27 @@ export default {
         code: { label: "Code", type: "text" },
       },
       async authorize(credentials) {
-        if (!credentials?.identifier || !credentials?.code || typeof credentials.identifier !== 'string' || !credentials.type || typeof credentials.type !== 'string') {
+        if (!credentials?.identifier || !credentials?.code || typeof credentials.identifier !== 'string') {
           return null;
         }
+
+        // Only email authentication is supported
+        const type = 'email';
 
         const verification = await verifyOTPCode(
           credentials.identifier as string,
           credentials.code as string,
-          credentials.type as 'email' | 'phone'
+          type
         );
 
         if (!verification.valid) {
           throw new Error(verification.error);
         }
-        const { success, profile } = await getOrCreateProfileByIdentifier(credentials.identifier as string, credentials.type as 'email' | 'phone');
+
+        // Only allow existing profiles - no new sign ups
+        const { success, profile } = await getProfileByIdentifier(credentials.identifier as string, type);
         if (!success || !profile) {
-          return null;
+          throw new Error('Profile not found. Please contact an administrator to create an account.');
         }
 
         // Check if user is admin

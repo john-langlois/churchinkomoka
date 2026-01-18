@@ -1,7 +1,18 @@
 import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
-import { createRetreatRegistration, getRetreatRegistrationById, getRetreatRegistrationsByProfileId } from '@/src/services/retreatService';
+import { auth } from '@/auth';
+import { createRetreatRegistration, getRetreatRegistrationById, getRetreatRegistrationsByProfileId, getAllRetreatRegistrations, updateRegistrationStatus } from '@/src/services/retreatService';
+
+// Helper to check if user is admin from request headers
+async function checkAdminFromRequest(request: Request): Promise<boolean> {
+  try {
+    const session = await auth();
+    return (session?.user as any)?.isAdmin === true;
+  } catch (error) {
+    return false;
+  }
+}
 
 // Validation schemas
 const registrantSchema = z.object({
@@ -73,4 +84,34 @@ export const retreatRouter = new Hono()
     const registrations = await getRetreatRegistrationsByProfileId(profileId);
     
     return c.json({ registrations });
-  });
+  })
+  .get('/all', async (c) => {
+    // Admin only - get all retreat registrations
+    const isAdmin = await checkAdminFromRequest(c.req.raw);
+    if (!isAdmin) {
+      return c.json({ error: 'Unauthorized' }, 403);
+    }
+    const registrations = await getAllRetreatRegistrations();
+    return c.json({ registrations });
+  })
+  .put(
+    '/:id/status',
+    zValidator('json', z.object({ status: z.enum(['pending', 'confirmed', 'cancelled', 'waitlisted']) })),
+    async (c) => {
+      const isAdmin = await checkAdminFromRequest(c.req.raw);
+      if (!isAdmin) {
+        return c.json({ error: 'Unauthorized' }, 403);
+      }
+
+      const id = c.req.param('id');
+      const { status } = c.req.valid('json');
+      
+      const result = await updateRegistrationStatus(id, status);
+      
+      if (!result.success) {
+        return c.json({ error: result.error || 'Failed to update status' }, 500);
+      }
+
+      return c.json({ message: 'Status updated successfully' });
+    }
+  );

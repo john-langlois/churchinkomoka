@@ -6,6 +6,8 @@ import type { NextRequest } from 'next/server';
 // Import route modules
 import { profilesRouter } from './routes/profiles';
 import { retreatRouter } from './routes/retreat';
+import { eventsRouter } from './routes/events';
+import { sermonsRouter } from './routes/sermons';
 
 // Create main Hono instance
 const app = new Hono().basePath('/api');
@@ -25,6 +27,8 @@ app.get('/', (c) => {
 // Mount route modules
 app.route('/profiles', profilesRouter);
 app.route('/retreat', retreatRouter);
+app.route('/events', eventsRouter);
+app.route('/sermons', sermonsRouter);
 
 // Export AppType for client
 export type AppType = typeof app;

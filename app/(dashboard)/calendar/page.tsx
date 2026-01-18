@@ -1,14 +1,42 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X, Clock, MapPin, Calendar, Bell, ChevronRight } from 'lucide-react';
 import { SectionHeader } from '@/src/components/SectionHeader';
 import { EventRow } from '@/src/components/EventRow';
-import { eventsData } from '@/src/lib/data';
+
+type EventForDisplay = {
+  id: string;
+  title: string;
+  description?: string;
+  category: string;
+  location: string;
+  time?: string;
+  displayDate: string;
+  isRecurring: boolean;
+};
 
 export default function CalendarPage() {
-  const [selectedEvent, setSelectedEvent] = useState<typeof eventsData[0] | null>(null);
+  const [events, setEvents] = useState<EventForDisplay[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedEvent, setSelectedEvent] = useState<EventForDisplay | null>(null);
+
+  useEffect(() => {
+    fetchEvents();
+  }, []);
+
+  const fetchEvents = async () => {
+    try {
+      const res = await fetch('/api/events');
+      const data = await res.json();
+      setEvents(data.events || []);
+    } catch (error) {
+      console.error('Error fetching events:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-stone-50 pt-24">
@@ -28,11 +56,21 @@ export default function CalendarPage() {
             </div>
 
             <div className="flex flex-col gap-6">
-              {eventsData.map((event) => (
-                <div key={event.id} onClick={() => setSelectedEvent(event)} className="cursor-pointer">
-                    <EventRow event={event} />
-                </div>
-              ))}
+              {loading ? (
+                <p className="text-stone-500 text-center py-8">Loading events...</p>
+              ) : events.length > 0 ? (
+                events.map((event) => (
+                  <div key={event.id} onClick={() => setSelectedEvent(event)} className="cursor-pointer">
+                    <EventRow event={{
+                      ...event,
+                      date: event.displayDate,
+                      day: event.displayDate.split(',')[0] || 'Sun',
+                    }} />
+                  </div>
+                ))
+              ) : (
+                <p className="text-stone-500 text-center py-8">No events scheduled</p>
+              )}
             </div>
           </div>
 
@@ -96,14 +134,14 @@ export default function CalendarPage() {
               </button>
               
               <div className="bg-stone-900 p-12 text-white relative overflow-hidden">
-                 <div className="absolute top-0 right-0 opacity-10 transform translate-x-1/4 -translate-y-1/4">
-                    <Calendar size={200} />
-                 </div>
-                 <div className="relative z-10">
-                    <span className="inline-block px-3 py-1 rounded-full bg-white/20 text-white text-[10px] font-bold uppercase tracking-widest mb-6 border border-white/20">{selectedEvent.category}</span>
-                    <h2 className="text-4xl font-black tracking-tighter leading-none mb-2">{selectedEvent.title}</h2>
-                    <p className="text-stone-400 font-medium">{selectedEvent.date}</p>
-                 </div>
+                <div className="absolute top-0 right-0 opacity-10 transform translate-x-1/4 -translate-y-1/4">
+                  <Calendar size={200} />
+                </div>
+                <div className="relative z-10">
+                  <span className="inline-block px-3 py-1 rounded-full bg-white/20 text-white text-[10px] font-bold uppercase tracking-widest mb-6 border border-white/20">{selectedEvent.category}</span>
+                  <h2 className="text-4xl font-black tracking-tighter leading-none mb-2">{selectedEvent.title}</h2>
+                  <p className="text-stone-400 font-medium">{selectedEvent.displayDate}</p>
+                </div>
               </div>
 
               <div className="p-10 space-y-8">
