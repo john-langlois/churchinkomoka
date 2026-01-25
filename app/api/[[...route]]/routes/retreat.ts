@@ -2,7 +2,20 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { auth } from '@/auth';
-import { createRetreatRegistration, getRetreatRegistrationById, getRetreatRegistrationsByProfileId, getAllRetreatRegistrations, updateRegistrationStatus } from '@/src/services/retreatService';
+import { 
+  createRetreatRegistration, 
+  getRetreatRegistrationById, 
+  getRetreatRegistrationsByProfileId, 
+  getAllRetreatRegistrations, 
+  updateRegistrationStatus,
+  getAllRetreats,
+  getActiveRetreats,
+  getRetreatById,
+  createRetreat,
+  updateRetreat,
+  deleteRetreat,
+  toggleRetreatActive
+} from '@/src/services/retreatService';
 
 // Helper to check if user is admin from request headers
 async function checkAdminFromRequest(request: Request): Promise<boolean> {
@@ -37,7 +50,155 @@ const createRegistrationSchema = z.object({
   registrants: z.array(registrantSchema).min(1, 'At least one registrant is required'),
 });
 
-export const retreatRouter = new Hono()
+// Validation schemas for retreat management
+const dateOrDateTimeSchema = z.string().refine(
+  (val) => {
+    if (!val) return true; // Allow empty strings for optional fields
+    const date = new Date(val);
+    return !isNaN(date.getTime());
+  },
+  { message: 'Must be a valid date or datetime string' }
+).optional().nullable();
+
+const createRetreatSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  description: z.string().optional(),
+  startDate: dateOrDateTimeSchema,
+  endDate: dateOrDateTimeSchema,
+  location: z.string().optional(),
+  isActive: z.boolean().default(false),
+});
+
+const updateRetreatSchema = createRetreatSchema.partial();
+
+const retreat = new Hono()
+  // Retreat management routes
+  .get('/retreats/all', async (c) => {
+    // Admin only - get all retreats
+    const isAdmin = await checkAdminFromRequest(c.req.raw);
+    if (!isAdmin) {
+      return c.json({ error: 'Unauthorized' }, 403);
+    }
+    const retreats = await getAllRetreats();
+    return c.json({ retreats });
+  })
+  .get('/retreats/active', async (c) => {
+    // Public route - get only active retreats
+    const activeRetreats = await getActiveRetreats();
+    return c.json({ retreats: activeRetreats });
+  })
+  .get('/retreats/:id', async (c) => {
+    const id = c.req.param('id');
+    const retreat = await getRetreatById(id);
+    
+    if (!retreat) {
+      return c.json({ error: 'Retreat not found' }, 404);
+    }
+
+    return c.json({ retreat });
+  })
+  .post(
+    '/retreats',
+    zValidator('json', createRetreatSchema),
+    async (c) => {
+      const isAdmin = await checkAdminFromRequest(c.req.raw);
+      if (!isAdmin) {
+        return c.json({ error: 'Unauthorized' }, 403);
+      }
+
+      const data = c.req.valid('json');
+      
+      const result = await createRetreat({
+        name: data.name,
+        description: data.description || null,
+        startDate: data.startDate ? new Date(data.startDate) : null,
+        endDate: data.endDate ? new Date(data.endDate) : null,
+        location: data.location || null,
+        isActive: data.isActive ?? false,
+      });
+
+      if (!result.success) {
+        return c.json({ error: result.error || 'Failed to create retreat' }, 500);
+      }
+
+      return c.json({ 
+        retreat: result.retreat,
+        message: 'Retreat created successfully' 
+      }, 201);
+    }
+  )
+  .put(
+    '/retreats/:id',
+    zValidator('json', updateRetreatSchema),
+    async (c) => {
+      const isAdmin = await checkAdminFromRequest(c.req.raw);
+      if (!isAdmin) {
+        return c.json({ error: 'Unauthorized' }, 403);
+      }
+
+      const id = c.req.param('id');
+      const data = c.req.valid('json');
+      
+      const updateData: any = {};
+      if (data.name !== undefined) updateData.name = data.name;
+      if (data.description !== undefined) updateData.description = data.description || null;
+      if (data.startDate !== undefined) updateData.startDate = data.startDate ? new Date(data.startDate) : null;
+      if (data.endDate !== undefined) updateData.endDate = data.endDate ? new Date(data.endDate) : null;
+      if (data.location !== undefined) updateData.location = data.location || null;
+      if (data.isActive !== undefined) updateData.isActive = data.isActive;
+
+      const result = await updateRetreat(id, updateData);
+
+      if (!result.success) {
+        return c.json({ error: result.error || 'Failed to update retreat' }, 500);
+      }
+
+      return c.json({ 
+        retreat: result.retreat,
+        message: 'Retreat updated successfully' 
+      });
+    }
+  )
+  .put(
+    '/retreats/:id/toggle-active',
+    zValidator('json', z.object({ isActive: z.boolean() })),
+    async (c) => {
+      const isAdmin = await checkAdminFromRequest(c.req.raw);
+      if (!isAdmin) {
+        return c.json({ error: 'Unauthorized' }, 403);
+      }
+
+      const id = c.req.param('id');
+      const { isActive } = c.req.valid('json');
+      
+      const result = await toggleRetreatActive(id, isActive);
+
+      if (!result.success) {
+        return c.json({ error: result.error || 'Failed to toggle retreat status' }, 500);
+      }
+
+      return c.json({ 
+        retreat: result.retreat,
+        message: 'Retreat status updated successfully' 
+      });
+    }
+  )
+  .delete('/retreats/:id', async (c) => {
+    const isAdmin = await checkAdminFromRequest(c.req.raw);
+    if (!isAdmin) {
+      return c.json({ error: 'Unauthorized' }, 403);
+    }
+
+    const id = c.req.param('id');
+    const result = await deleteRetreat(id);
+
+    if (!result.success) {
+      return c.json({ error: result.error || 'Failed to delete retreat' }, 500);
+    }
+
+    return c.json({ message: 'Retreat deleted successfully' });
+  })
+  // Registration routes
   .post(
     '/',
     zValidator('json', createRegistrationSchema),
@@ -91,7 +252,8 @@ export const retreatRouter = new Hono()
     if (!isAdmin) {
       return c.json({ error: 'Unauthorized' }, 403);
     }
-    const registrations = await getAllRetreatRegistrations();
+    const retreatId = c.req.query('retreatId');
+    const registrations = await getAllRetreatRegistrations(retreatId || undefined);
     return c.json({ registrations });
   })
   .put(
@@ -115,3 +277,5 @@ export const retreatRouter = new Hono()
       return c.json({ message: 'Status updated successfully' });
     }
   );
+
+export default retreat;

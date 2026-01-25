@@ -23,26 +23,37 @@ async function checkAdminFromRequest(request: Request): Promise<boolean> {
   }
 }
 
+// Helper to validate date or datetime strings
+const dateOrDateTimeSchema = z.string().refine(
+  (val) => {
+    if (!val) return true; // Allow empty strings for optional fields
+    // Try parsing as date (YYYY-MM-DD) or datetime (ISO 8601)
+    const date = new Date(val);
+    return !isNaN(date.getTime());
+  },
+  { message: 'Must be a valid date or datetime string' }
+).optional().nullable();
+
 // Validation schemas
 const createEventSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   description: z.string().optional(),
   category: z.enum(['Service', 'Prayer', 'Retreat', 'Bible Study', 'Outreach']),
   location: z.string().min(1, 'Location is required'),
-  startDate: z.string().datetime().optional().nullable(),
-  endDate: z.string().datetime().optional().nullable(),
+  startDate: dateOrDateTimeSchema,
+  endDate: dateOrDateTimeSchema,
   time: z.string().optional(),
   isRecurring: z.boolean().default(false),
   recurrencePattern: z.enum(['daily', 'weekly', 'monthly', 'yearly']).optional().nullable(),
   recurrenceDayOfWeek: z.number().int().min(0).max(6).optional().nullable(),
   recurrenceDayOfMonth: z.number().int().min(1).max(31).optional().nullable(),
-  recurrenceEndDate: z.string().datetime().optional().nullable(),
+  recurrenceEndDate: dateOrDateTimeSchema,
   isActive: z.boolean().default(true),
 });
 
 const updateEventSchema = createEventSchema.partial();
 
-export const eventsRouter = new Hono()
+const events = new Hono()
   .get('/', async (c) => {
     // Public endpoint - get all active events for display
     const events = await getEventsForDisplay();
@@ -165,3 +176,5 @@ export const eventsRouter = new Hono()
 
     return c.json({ message: 'Event deleted successfully' });
   });
+
+export default events;

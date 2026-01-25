@@ -23,26 +23,27 @@ async function checkAdminFromRequest(request: Request): Promise<boolean> {
 }
 
 // Validation schemas
-const articleContentSchema = z.object({
-  intro: z.string(),
-  paragraphs: z.array(z.string()),
-  takeaways: z.array(z.string()),
-});
-
 const createSermonSchema = z.object({
   title: z.string().min(1, 'Title is required'),
-  speaker: z.string().min(1, 'Speaker is required'),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
-  thumbnail: z.string().url().optional().nullable(),
+  speaker: z.string().optional().nullable(),
+  date: z.union([
+    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+    z.literal(''),
+    z.null(),
+  ]).optional().nullable(),
   youtubeId: z.string().optional().nullable(),
-  spotifyLink: z.string().url().optional().nullable(),
-  articleContent: articleContentSchema.optional().nullable(),
+  spotifyLink: z.union([
+    z.string().url(),
+    z.literal(''),
+    z.null(),
+  ]).optional().nullable(),
+  articleContent: z.string().optional().nullable(), // Markdown content as string
   isPublic: z.boolean().default(true),
 });
 
 const updateSermonSchema = createSermonSchema.partial();
 
-export const sermonsRouter = new Hono()
+const sermons = new Hono()
   .get('/', async (c) => {
     // Public endpoint - get only public sermons
     const sermons = await getPublicSermons();
@@ -86,12 +87,11 @@ export const sermonsRouter = new Hono()
       
       const result = await createSermon({
         title: data.title,
-        speaker: data.speaker,
-        date: data.date,
-        thumbnail: data.thumbnail || null,
+        speaker: data.speaker || null as any,
+        date: data.date || null as any,
         youtubeId: data.youtubeId || null,
         spotifyLink: data.spotifyLink || null,
-        articleContent: data.articleContent || null,
+        articleContent: data.articleContent || null as any, // Markdown string stored in jsonb
         isPublic: data.isPublic,
       });
 
@@ -119,12 +119,11 @@ export const sermonsRouter = new Hono()
       
       const updateData: any = {};
       if (data.title !== undefined) updateData.title = data.title;
-      if (data.speaker !== undefined) updateData.speaker = data.speaker;
-      if (data.date !== undefined) updateData.date = data.date;
-      if (data.thumbnail !== undefined) updateData.thumbnail = data.thumbnail || null;
+      if (data.speaker !== undefined) updateData.speaker = data.speaker || null;
+      if (data.date !== undefined) updateData.date = data.date || null;
       if (data.youtubeId !== undefined) updateData.youtubeId = data.youtubeId || null;
       if (data.spotifyLink !== undefined) updateData.spotifyLink = data.spotifyLink || null;
-      if (data.articleContent !== undefined) updateData.articleContent = data.articleContent || null;
+      if (data.articleContent !== undefined) updateData.articleContent = data.articleContent || null as any; // Markdown string stored in jsonb
       if (data.isPublic !== undefined) updateData.isPublic = data.isPublic;
 
       const result = await updateSermon(id, updateData);
@@ -172,3 +171,5 @@ export const sermonsRouter = new Hono()
 
     return c.json({ message: 'Sermon deleted successfully' });
   });
+
+export default sermons;

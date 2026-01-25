@@ -32,7 +32,7 @@ const createProfileSchema = z.object({
 
 const updateProfileSchema = createProfileSchema.partial();
 
-export const profilesRouter = new Hono()
+const profiles = new Hono()
   .get('/all', async (c) => {
     // Admin only - get all profiles
     const isAdmin = await checkAdminFromRequest(c.req.raw);
@@ -140,3 +140,5 @@ export const profilesRouter = new Hono()
 
     return c.json({ message: 'Profile deleted successfully' });
   });
+
+export default profiles;

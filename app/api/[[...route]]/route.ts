@@ -1,52 +1,59 @@
 import { Hono } from 'hono';
+import { HTTPException } from 'hono/http-exception';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import type { NextRequest } from 'next/server';
+import profiles from './routes/profiles';
+import retreat from './routes/retreat';
+import events from './routes/events';
+import sermons from './routes/sermons';
 
-// Import route modules
-import { profilesRouter } from './routes/profiles';
-import { retreatRouter } from './routes/retreat';
-import { eventsRouter } from './routes/events';
-import { sermonsRouter } from './routes/sermons';
+const app = new Hono()
+  .basePath('/api')
+  .use('*', logger())
+  .use('*', cors({
+    origin: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+    credentials: true,
+  }))
+  .get('/', (c) => {
+    return c.json({ status: 'ok', message: 'API is running' });
+  })
+  .route('/profiles', profiles)
+  .route('/retreat', retreat)
+  .route('/events', events)
+  .route('/sermons', sermons);
 
-// Create main Hono instance
-const app = new Hono().basePath('/api');
-
-// Middleware
-app.use('*', logger());
-app.use('*', cors({
-  origin: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-  credentials: true,
-}));
-
-// Health check
-app.get('/', (c) => {
-  return c.json({ status: 'ok', message: 'API is running' });
-});
-
-// Mount route modules
-app.route('/profiles', profilesRouter);
-app.route('/retreat', retreatRouter);
-app.route('/events', eventsRouter);
-app.route('/sermons', sermonsRouter);
-
-// Export AppType for client
 export type AppType = typeof app;
 
-// Next.js App Router handler
 async function handler(request: NextRequest) {
-  const url = new URL(request.url);
-  const method = request.method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
-  
-  // Convert Next.js request to Hono-compatible format
-  const honoRequest = new Request(url.toString(), {
-    method,
-    headers: request.headers,
-    body: request.body,
-  });
-
-  const response = await app.fetch(honoRequest);
-  return response;
+  try {
+    const res = await app.fetch(request);
+    
+    // If it's a 400 error, log the response body for debugging
+    if (res.status === 400) {
+      const clonedRes = res.clone();
+      const body = await clonedRes.text();
+      console.error('400 Validation Error:', body);
+    }
+    
+    return res;
+  } catch (err) {
+    if (err instanceof HTTPException) {
+      return err.getResponse();
+    }
+    // Handle validation errors and other errors
+    console.error('API Error:', err);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: err instanceof Error ? err.message : 'Internal server error',
+      }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  }
 }
 
 export const GET = handler;

@@ -15,6 +15,20 @@
       "when": 1768768270658,
       "tag": "0001_peaceful_moondragon",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1769305066296,
+      "tag": "0002_secret_timeslip",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1769306882385,
+      "tag": "0003_lovely_ares",
+      "breakpoints": true
     }
   ]
 }
