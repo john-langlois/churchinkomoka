@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ChevronRight, Music } from 'lucide-react';
+import { SpotifyIcon } from '@/src/components/SpotifyIcon';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -120,7 +121,7 @@ export default function SermonDetailPage() {
               )}
               {sermon.spotifyLink && (
                 <a href={sermon.spotifyLink} target="_blank" rel="noreferrer" className="flex items-center gap-4 bg-[#1DB954] hover:bg-[#1ed760] text-white p-4 rounded-xl shadow-md transition-colors no-underline">
-                  <Music className="w-8 h-8" />
+                  <SpotifyIcon size={32} className="text-white" />
                   <div className="flex flex-col">
                     <span className="font-bold text-lg leading-none m-0">Listen on Spotify</span>
                     <span className="text-white/80 text-sm m-0">Audio Podcast Available</span>
@@ -174,7 +175,7 @@ export default function SermonDetailPage() {
               )}
               {sermon.spotifyLink && (
                 <a href={sermon.spotifyLink} target="_blank" rel="noreferrer" className="flex items-center gap-4 bg-[#1DB954] hover:bg-[#1ed760] text-white p-4 rounded-xl shadow-md transition-colors no-underline">
-                  <Music className="w-8 h-8" />
+                  <SpotifyIcon size={32} className="text-white" />
                   <div className="flex flex-col">
                     <span className="font-bold text-lg leading-none m-0">Listen on Spotify</span>
                     <span className="text-white/80 text-sm m-0">Audio Podcast Available</span>

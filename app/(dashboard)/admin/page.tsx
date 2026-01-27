@@ -243,19 +243,39 @@ export default function AdminPage() {
       const url = editingEvent ? `/api/events/${editingEvent.id}` : '/api/events';
       const method = editingEvent ? 'PUT' : 'POST';
       
+      // Clean up the data to match API expectations
+      const cleanedData: any = {
+        ...eventData,
+        // Convert empty strings to null/undefined for optional fields
+        description: eventData.description || undefined,
+        time: eventData.time || undefined,
+        startDate: eventData.startDate || undefined,
+        endDate: eventData.endDate || undefined,
+        recurrencePattern: eventData.recurrencePattern && eventData.recurrencePattern !== '' ? eventData.recurrencePattern : undefined,
+        recurrenceDayOfWeek: eventData.recurrenceDayOfWeek ?? undefined,
+        recurrenceDayOfMonth: eventData.recurrenceDayOfMonth ?? undefined,
+        recurrenceEndDate: eventData.recurrenceEndDate || undefined,
+      };
+      
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(eventData),
+        body: JSON.stringify(cleanedData),
       });
 
-      if (res.ok) {
-        setShowEventForm(false);
-        setEditingEvent(null);
-        fetchData();
+      if (!res.ok) {
+        const errorData = await res.json();
+        console.error('Error saving event:', errorData);
+        alert(errorData.error || 'Failed to save event. Please check the form and try again.');
+        return;
       }
+
+      setShowEventForm(false);
+      setEditingEvent(null);
+      fetchData();
     } catch (error) {
       console.error('Error saving event:', error);
+      alert('Failed to save event. Please try again.');
     }
   };
 
@@ -983,7 +1003,7 @@ function EventFormModal({ event, onClose, onSave }: { event: Event | null; onClo
                   </label>
                   <select
                     value={formData.recurrencePattern || ''}
-                    onChange={(e) => setFormData({ ...formData, recurrencePattern: e.target.value as any || null })}
+                    onChange={(e) => setFormData({ ...formData, recurrencePattern: e.target.value ? (e.target.value as any) : null })}
                     className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none"
                   >
                     <option value="">Select pattern</option>
@@ -996,16 +1016,22 @@ function EventFormModal({ event, onClose, onSave }: { event: Event | null; onClo
                 {formData.recurrencePattern === 'weekly' && (
                   <div>
                     <label className="block text-sm font-bold uppercase tracking-widest text-stone-400 mb-2">
-                      Day of Week (0=Sunday, 6=Saturday)
+                      Day of Week
                     </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="6"
+                    <select
                       value={formData.recurrenceDayOfWeek ?? ''}
                       onChange={(e) => setFormData({ ...formData, recurrenceDayOfWeek: e.target.value ? parseInt(e.target.value) : null })}
                       className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none"
-                    />
+                    >
+                      <option value="">Select day</option>
+                      <option value="0">Sunday</option>
+                      <option value="1">Monday</option>
+                      <option value="2">Tuesday</option>
+                      <option value="3">Wednesday</option>
+                      <option value="4">Thursday</option>
+                      <option value="5">Friday</option>
+                      <option value="6">Saturday</option>
+                    </select>
                   </div>
                 )}
                 {formData.recurrencePattern === 'monthly' && (

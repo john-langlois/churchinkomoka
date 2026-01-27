@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { Youtube, Music, ChevronRight, Search, X } from 'lucide-react';
+import { Music, ChevronRight, Search, X } from 'lucide-react';
+import { SpotifyIcon } from '@/src/components/SpotifyIcon';
+import { YouTubeIcon } from '@/src/components/YouTubeIcon';
 import { format } from 'date-fns';
 import { SectionHeader } from '@/src/components/SectionHeader';
 import { Input } from '@/src/components/ui/input';
@@ -174,12 +176,12 @@ export default function ResourcesPage() {
                     <div className="flex items-center gap-4 pt-6 border-t border-stone-100">
                       {sermon.youtubeId && (
                         <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center group-hover:bg-red-500 group-hover:text-white transition-colors">
-                          <Youtube size={16} />
+                          <YouTubeIcon size={16} className="group-hover:text-white text-red-500" />
                         </div>
                       )}
                       {sermon.spotifyLink && (
                         <div className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center group-hover:bg-green-500 group-hover:text-white transition-colors">
-                          <Music size={16} />
+                          <SpotifyIcon size={16} className="group-hover:text-white text-green-500" />
                         </div>
                       )}
                       <span className="ml-auto text-xs font-bold uppercase tracking-widest text-stone-400 group-hover:text-stone-900 transition-colors flex items-center">
