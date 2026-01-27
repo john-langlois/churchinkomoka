@@ -12,9 +12,23 @@ export const registrationStatusEnum = pgEnum('registration_status', [
   'waitlisted'
 ]);
 
+// Retreats table - stores multiple retreats
+export const retreats = pgTable('retreats', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  startDate: timestamp('start_date'),
+  endDate: timestamp('end_date'),
+  location: varchar('location', { length: 255 }),
+  isActive: boolean('is_active').default(false).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // Main retreat registration table
 export const retreatRegistrations = pgTable('retreat_registrations', {
   id: uuid('id').defaultRandom().primaryKey(),
+  retreatId: uuid('retreat_id').references(() => retreats.id), // Link to specific retreat
   type: registrationTypeEnum('type').notNull(), // 'individual' or 'family'
   profileId: uuid('profile_id').references(() => profiles.id).notNull(), // Main registrant
   contactName: varchar('contact_name', { length: 255 }).notNull(),
@@ -42,6 +56,9 @@ export const retreatRegistrants = pgTable('retreat_registrants', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+export type Retreat = typeof retreats.$inferSelect;
+export type NewRetreat = typeof retreats.$inferInsert;
 
 export type RetreatRegistration = typeof retreatRegistrations.$inferSelect;
 export type NewRetreatRegistration = typeof retreatRegistrations.$inferInsert;

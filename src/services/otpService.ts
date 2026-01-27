@@ -2,11 +2,10 @@ import { db } from '@/src/lib/db/connection';
 import { otpCodes } from '@/src/lib/db/schema';
 import { eq, and, gt } from 'drizzle-orm';
 import type { NewOtpCode } from '@/src/lib/db/schema/otp';
+import { sendOTPEmail } from './emailService';
 
 /**
  * Verify OTP code for an identifier
- * This is a placeholder implementation - actual OTP sending/verification
- * should be integrated with Twilio (SMS) or SendGrid (Email)
  */
 export async function verifyOTPCode(
   identifier: string,
@@ -50,13 +49,18 @@ export async function verifyOTPCode(
 
 /**
  * Generate and send OTP code
- * This is a placeholder - should integrate with Twilio/SendGrid
+ * Only supports email via Resend. Phone OTP is not supported.
  */
 export async function sendOTPCode(
   identifier: string,
   type: 'email' | 'phone'
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Only support email for admin authentication
+    if (type !== 'email') {
+      return { success: false, error: 'Only email authentication is supported' };
+    }
+
     // Generate 6-digit code
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     
@@ -74,9 +78,20 @@ export async function sendOTPCode(
 
     await db.insert(otpCodes).values(newOtp);
 
-    // TODO: Integrate with Twilio (SMS) or SendGrid (Email)
-    // For now, just log the code (remove in production!)
-    console.log(`OTP Code for ${identifier}: ${code}`);
+    // Send email via Resend
+    const emailResult = await sendOTPEmail(identifier, code);
+    
+    if (!emailResult.success) {
+      // Remove the OTP from database if email failed
+      await db.delete(otpCodes).where(
+        and(
+          eq(otpCodes.identifier, identifier),
+          eq(otpCodes.type, type),
+          eq(otpCodes.code, code)
+        )
+      );
+      return { success: false, error: emailResult.error || 'Failed to send OTP email' };
+    }
 
     return { success: true };
   } catch (error) {

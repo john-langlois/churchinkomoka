@@ -1,7 +1,9 @@
 import { db } from '@/src/lib/db/connection';
-import { retreatRegistrations, retreatRegistrants } from '@/src/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { retreats, retreatRegistrations, retreatRegistrants } from '@/src/lib/db/schema';
+import { eq, and } from 'drizzle-orm';
 import type { 
+  Retreat,
+  NewRetreat,
   NewRetreatRegistration, 
   NewRetreatRegistrant,
   RetreatRegistration,
@@ -9,10 +11,201 @@ import type {
 } from '@/src/lib/db/schema/retreat';
 
 /**
+ * Get all retreats (admin function)
+ */
+export async function getAllRetreats(): Promise<Retreat[]> {
+  try {
+    const allRetreats = await db
+      .select()
+      .from(retreats)
+      .orderBy(retreats.createdAt);
+    
+    return allRetreats;
+  } catch (error) {
+    console.error('Error in getAllRetreats:', error);
+    return [];
+  }
+}
+
+/**
+ * Get only active retreats (public function)
+ */
+export async function getActiveRetreats(): Promise<Retreat[]> {
+  try {
+    const activeRetreats = await db
+      .select()
+      .from(retreats)
+      .where(eq(retreats.isActive, true))
+      .orderBy(retreats.startDate);
+    
+    return activeRetreats;
+  } catch (error) {
+    console.error('Error in getActiveRetreats:', error);
+    return [];
+  }
+}
+
+/**
+ * Get a retreat by ID
+ */
+export async function getRetreatById(id: string): Promise<Retreat | null> {
+  try {
+    const [retreat] = await db
+      .select()
+      .from(retreats)
+      .where(eq(retreats.id, id))
+      .limit(1);
+    
+    return retreat || null;
+  } catch (error) {
+    console.error('Error in getRetreatById:', error);
+    return null;
+  }
+}
+
+/**
+ * Create a new retreat
+ */
+export async function createRetreat(
+  data: {
+    name: string;
+    description?: string;
+    startDate?: Date | null;
+    endDate?: Date | null;
+    location?: string;
+    isActive?: boolean;
+  }
+): Promise<{ success: boolean; retreat: Retreat | null; error?: string }> {
+  try {
+    const newRetreat: NewRetreat = {
+      name: data.name,
+      description: data.description || null,
+      startDate: data.startDate || null,
+      endDate: data.endDate || null,
+      location: data.location || null,
+      isActive: data.isActive ?? false,
+    };
+
+    const [retreat] = await db
+      .insert(retreats)
+      .values(newRetreat)
+      .returning();
+
+    return { success: true, retreat };
+  } catch (error) {
+    console.error('Error in createRetreat:', error);
+    return {
+      success: false,
+      retreat: null,
+      error: error instanceof Error ? error.message : 'Failed to create retreat'
+    };
+  }
+}
+
+/**
+ * Update a retreat
+ */
+export async function updateRetreat(
+  id: string,
+  data: {
+    name?: string;
+    description?: string;
+    startDate?: Date | null;
+    endDate?: Date | null;
+    location?: string;
+    isActive?: boolean;
+  }
+): Promise<{ success: boolean; retreat: Retreat | null; error?: string }> {
+  try {
+    const updateData: Partial<NewRetreat> = {
+      updatedAt: new Date(),
+    };
+
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.description !== undefined) updateData.description = data.description || null;
+    if (data.startDate !== undefined) updateData.startDate = data.startDate || null;
+    if (data.endDate !== undefined) updateData.endDate = data.endDate || null;
+    if (data.location !== undefined) updateData.location = data.location || null;
+    if (data.isActive !== undefined) updateData.isActive = data.isActive;
+
+    const [retreat] = await db
+      .update(retreats)
+      .set(updateData)
+      .where(eq(retreats.id, id))
+      .returning();
+
+    if (!retreat) {
+      return { success: false, retreat: null, error: 'Retreat not found' };
+    }
+
+    return { success: true, retreat };
+  } catch (error) {
+    console.error('Error in updateRetreat:', error);
+    return {
+      success: false,
+      retreat: null,
+      error: error instanceof Error ? error.message : 'Failed to update retreat'
+    };
+  }
+}
+
+/**
+ * Delete a retreat
+ */
+export async function deleteRetreat(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    await db
+      .delete(retreats)
+      .where(eq(retreats.id, id));
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error in deleteRetreat:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to delete retreat'
+    };
+  }
+}
+
+/**
+ * Toggle retreat active status
+ */
+export async function toggleRetreatActive(
+  id: string,
+  isActive: boolean
+): Promise<{ success: boolean; retreat: Retreat | null; error?: string }> {
+  try {
+    const [retreat] = await db
+      .update(retreats)
+      .set({ 
+        isActive,
+        updatedAt: new Date()
+      })
+      .where(eq(retreats.id, id))
+      .returning();
+
+    if (!retreat) {
+      return { success: false, retreat: null, error: 'Retreat not found' };
+    }
+
+    return { success: true, retreat };
+  } catch (error) {
+    console.error('Error in toggleRetreatActive:', error);
+    return {
+      success: false,
+      retreat: null,
+      error: error instanceof Error ? error.message : 'Failed to toggle retreat status'
+    };
+  }
+}
+
+/**
  * Create a new retreat registration (individual or family)
  */
 export async function createRetreatRegistration(
   registrationData: {
+    retreatId: string;
     type: 'individual' | 'family';
     profileId: string;
     contactName: string;
@@ -35,6 +228,7 @@ export async function createRetreatRegistration(
   try {
     // Start transaction by creating registration first
     const newRegistration: NewRetreatRegistration = {
+      retreatId: registrationData.retreatId,
       type: registrationData.type,
       profileId: registrationData.profileId,
       contactName: registrationData.contactName,
@@ -133,12 +327,17 @@ export async function getRetreatRegistrationsByProfileId(
 /**
  * Get all retreat registrations (admin function)
  */
-export async function getAllRetreatRegistrations(): Promise<RetreatRegistration[]> {
+export async function getAllRetreatRegistrations(retreatId?: string): Promise<RetreatRegistration[]> {
   try {
-    const registrations = await db
+    let query = db
       .select()
-      .from(retreatRegistrations)
-      .orderBy(retreatRegistrations.createdAt);
+      .from(retreatRegistrations);
+
+    if (retreatId) {
+      query = query.where(eq(retreatRegistrations.retreatId, retreatId)) as any;
+    }
+
+    const registrations = await query.orderBy(retreatRegistrations.createdAt);
 
     return registrations;
   } catch (error) {
