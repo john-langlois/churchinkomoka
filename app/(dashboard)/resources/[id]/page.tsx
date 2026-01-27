@@ -149,12 +149,14 @@ export default function SermonDetailPage() {
                       em: ({children, ...props}) => <em className="italic" {...props}>{children}</em>,
                       a: ({children, ...props}) => <a className="text-stone-900 underline hover:text-stone-600 transition-colors" {...props}>{children}</a>,
                       blockquote: ({children, ...props}) => <blockquote className="border-l-4 border-stone-300 pl-4 italic text-stone-600 my-4" {...props}>{children}</blockquote>,
-                      code: ({inline, children, ...props}) => 
-                        inline ? (
+                      code: ({children, ...props}: any) => {
+                        const isInline = !props.className || !props.className.includes('language-');
+                        return isInline ? (
                           <code className="bg-stone-100 px-1.5 py-0.5 rounded text-sm font-mono text-stone-900" {...props}>{children}</code>
                         ) : (
                           <code className="block bg-stone-100 p-4 rounded-lg text-sm font-mono text-stone-900 overflow-x-auto my-4" {...props}>{children}</code>
-                        ),
+                        );
+                      },
                       pre: ({children, ...props}) => <pre className="bg-stone-100 p-4 rounded-lg overflow-x-auto my-4" {...props}>{children}</pre>,
                     }}
                   >

@@ -41,6 +41,7 @@ const registrantSchema = z.object({
 });
 
 const createRegistrationSchema = z.object({
+  retreatId: z.string().uuid('Valid retreat ID is required'),
   type: z.enum(['individual', 'family']),
   profileId: z.string().uuid(),
   contactName: z.string().min(1, 'Contact name is required'),
@@ -110,10 +111,10 @@ const retreat = new Hono()
       
       const result = await createRetreat({
         name: data.name,
-        description: data.description || null,
-        startDate: data.startDate ? new Date(data.startDate) : null,
-        endDate: data.endDate ? new Date(data.endDate) : null,
-        location: data.location || null,
+        description: data.description || undefined,
+        startDate: data.startDate ? new Date(data.startDate) : undefined,
+        endDate: data.endDate ? new Date(data.endDate) : undefined,
+        location: data.location || undefined,
         isActive: data.isActive ?? false,
       });
 
@@ -141,10 +142,10 @@ const retreat = new Hono()
       
       const updateData: any = {};
       if (data.name !== undefined) updateData.name = data.name;
-      if (data.description !== undefined) updateData.description = data.description || null;
-      if (data.startDate !== undefined) updateData.startDate = data.startDate ? new Date(data.startDate) : null;
-      if (data.endDate !== undefined) updateData.endDate = data.endDate ? new Date(data.endDate) : null;
-      if (data.location !== undefined) updateData.location = data.location || null;
+      if (data.description !== undefined) updateData.description = data.description || undefined;
+      if (data.startDate !== undefined) updateData.startDate = data.startDate ? new Date(data.startDate) : undefined;
+      if (data.endDate !== undefined) updateData.endDate = data.endDate ? new Date(data.endDate) : undefined;
+      if (data.location !== undefined) updateData.location = data.location || undefined;
       if (data.isActive !== undefined) updateData.isActive = data.isActive;
 
       const result = await updateRetreat(id, updateData);
@@ -206,6 +207,7 @@ const retreat = new Hono()
       const data = c.req.valid('json');
       
       const result = await createRetreatRegistration({
+        retreatId: data.retreatId,
         type: data.type,
         profileId: data.profileId,
         contactName: data.contactName,
