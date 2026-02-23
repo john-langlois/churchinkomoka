@@ -137,7 +137,7 @@ export function SermonsTable({
         const youtubeId = row.getValue("youtubeId") as string | undefined
         return youtubeId ? (
           <a 
-            href={`https://youtube.com/watch?v=${youtubeId}`}
+            href={`https://churchinkomoka.com/watch?v=${youtubeId}`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-blue-600 hover:text-blue-800 text-sm"

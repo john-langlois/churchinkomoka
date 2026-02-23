@@ -102,7 +102,7 @@ export const Footer = () => {
         <p>&copy; {new Date().getFullYear()} Church in Komoka.</p>
         <div className="flex gap-4 mt-4 md:mt-0">
           <a
-            href="https://youtube.com"
+            href="https://churchinkomoka.com"
             target="_blank"
             rel="noopener noreferrer"
             className="hover:text-white transition-colors"
@@ -111,7 +111,7 @@ export const Footer = () => {
             <YouTubeIcon size={20} className="text-current" />
           </a>
           <a
-            href="https://open.spotify.com"
+            href="https://churchinkomoka.com"
             target="_blank"
             rel="noopener noreferrer"
             className="hover:text-white transition-colors"

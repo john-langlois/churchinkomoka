@@ -193,7 +193,7 @@ export default function HomePage() {
                 </div>
                 <div className="flex items-center gap-2 md:gap-4 flex-wrap">
                   <a
-                    href="https://youtube.com"
+                    href="https://churchinkomoka.com"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-4 py-2 rounded-full border border-white/30 bg-white/10 backdrop-blur-md text-white text-xs sm:text-sm font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-white/20 transition-colors shrink-0"
@@ -202,7 +202,7 @@ export default function HomePage() {
                     Live Online
                   </a>
                   <a
-                    href="https://open.spotify.com"
+                    href="https://churchinkomoka.com"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-4 py-2 rounded-full border border-white/30 bg-white/10 backdrop-blur-md text-white text-xs sm:text-sm font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-white/20 transition-colors shrink-0"

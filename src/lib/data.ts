@@ -90,7 +90,7 @@ export const sermonsData = [
     thumbnail:
       "https://images.unsplash.com/photo-1504052434569-70ad5836ab65?q=80&w=2070&auto=format&fit=crop",
     youtubeId: "dQw4w9WgXcQ",
-    spotifyLink: "https://open.spotify.com",
+    spotifyLink: "https://churchinkomoka.com",
     articleContent: {
       intro:
         "What does it truly mean to follow Jesus in the modern world? It starts with a radical denial of self.",
@@ -114,7 +114,7 @@ export const sermonsData = [
     thumbnail:
       "https://images.unsplash.com/photo-1445633814773-e687a5de9baa?q=80&w=2070&auto=format&fit=crop",
     youtubeId: "dQw4w9WgXcQ",
-    spotifyLink: "https://open.spotify.com",
+    spotifyLink: "https://churchinkomoka.com",
     articleContent: {
       intro:
         "We are not isolated believers; we are stones being built into a spiritual house.",
@@ -138,7 +138,7 @@ export const sermonsData = [
     thumbnail:
       "https://images.unsplash.com/photo-1519817650390-64a93db51149?q=80&w=2070&auto=format&fit=crop",
     youtubeId: "dQw4w9WgXcQ",
-    spotifyLink: "https://open.spotify.com",
+    spotifyLink: "https://churchinkomoka.com",
     articleContent: {
       intro:
         "Because He lives, we can face tomorrow. The resurrection is the cornerstone of our faith.",

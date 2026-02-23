@@ -599,7 +599,7 @@ export default function AdminPage() {
                           <td className="px-6 py-4">
                             {sermon.youtubeId ? (
                               <a 
-                                href={`https://youtube.com/watch?v=${sermon.youtubeId}`}
+                                href={`https://churchinkomoka.com/watch?v=${sermon.youtubeId}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-blue-600 hover:text-blue-800 text-sm"
