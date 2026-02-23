@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -84,6 +84,20 @@ const inputClass =
   "w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 font-medium text-stone-900 focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none transition-all";
 
 export default function RetreatPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-stone-50 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-stone-900" />
+        </div>
+      }
+    >
+      <RetreatPageContent />
+    </Suspense>
+  );
+}
+
+function RetreatPageContent() {
   const { data: session } = useSession();
   const searchParams = useSearchParams();
 
