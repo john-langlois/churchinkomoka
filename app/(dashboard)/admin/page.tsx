@@ -3,20 +3,20 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { 
-  Calendar, 
-  BookOpen, 
-  Users, 
+import {
+  Calendar,
+  BookOpen,
+  Users,
   UserPlus,
-  Plus, 
-  Edit, 
-  Trash2, 
-  Eye, 
+  Plus,
+  Edit,
+  Trash2,
+  Eye,
   EyeOff,
   X,
   Save,
   Loader2,
-  Shield
+  Shield,
 } from 'lucide-react';
 
 type Event = {
@@ -52,6 +52,14 @@ type Sermon = {
   isPublic: boolean;
 };
 
+type PricingTier = {
+  name: string;
+  minAge: number;
+  maxAge: number | null;
+  price: number | null;
+  isFree: boolean;
+};
+
 type Retreat = {
   id: string;
   name: string;
@@ -60,6 +68,7 @@ type Retreat = {
   endDate?: string;
   location?: string;
   isActive: boolean;
+  pricingTiers?: PricingTier[] | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -697,16 +706,25 @@ export default function AdminPage() {
                           {retreat.description && (
                             <p className="text-stone-600 mb-2">{retreat.description}</p>
                           )}
-                          <div className="flex gap-6 text-sm text-stone-500">
+                          <div className="flex flex-wrap gap-6 text-sm text-stone-500">
                             {retreat.location && (
                               <span><span className="font-bold">Location:</span> {retreat.location}</span>
                             )}
                             {retreat.startDate && (
                               <span>
-                                <span className="font-bold">Dates:</span> {new Date(retreat.startDate).toLocaleDateString()}
-                                {retreat.endDate && ` - ${new Date(retreat.endDate).toLocaleDateString()}`}
+                                <span className="font-bold">Dates:</span> {new Date(retreat.startDate).toLocaleDateString('en-US', { timeZone: 'America/New_York' })}
+                                {retreat.endDate && ` - ${new Date(retreat.endDate).toLocaleDateString('en-US', { timeZone: 'America/New_York' })}`}
                               </span>
                             )}
+                            <span>
+                              <span className="font-bold">Pricing:</span>{' '}
+                              {retreat.pricingTiers && retreat.pricingTiers.length > 0
+                                ? retreat.pricingTiers
+                                    .sort((a, b) => a.minAge - b.minAge)
+                                    .map((t) => `${t.name} ${t.isFree ? 'Free' : `$${t.price ?? 0}`}`)
+                                    .join(', ')
+                                : 'Contact for pricing'}
+                            </span>
                           </div>
                         </div>
                         <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
@@ -799,7 +817,7 @@ export default function AdminPage() {
                             </span>
                           </td>
                           <td className="px-6 py-4 text-stone-600">
-                            {profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : '—'}
+                            {profile.createdAt ? new Date(profile.createdAt).toLocaleDateString('en-US', { timeZone: 'America/New_York' }) : '—'}
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex gap-2 justify-end">
@@ -1275,6 +1293,8 @@ function SermonFormModal({ sermon, onClose, onSave }: { sermon: Sermon | null; o
   );
 }
 
+const defaultPricingTier: PricingTier = { name: '', minAge: 0, maxAge: null, price: null, isFree: false };
+
 // Retreat Form Component
 function RetreatFormModal({ retreat, onClose, onSave }: { retreat: Retreat | null; onClose: () => void; onSave: (data: Partial<Retreat>) => void }) {
   const [formData, setFormData] = useState<Partial<Retreat>>({
@@ -1284,7 +1304,19 @@ function RetreatFormModal({ retreat, onClose, onSave }: { retreat: Retreat | nul
     endDate: retreat?.endDate ? new Date(retreat.endDate).toISOString().slice(0, 16) : '',
     location: retreat?.location || '',
     isActive: retreat?.isActive ?? false,
+    pricingTiers: retreat?.pricingTiers?.length ? [...retreat.pricingTiers] : [],
   });
+  const tiers = formData.pricingTiers ?? [];
+
+  const updateTiers = (next: PricingTier[]) => {
+    setFormData((prev) => ({ ...prev, pricingTiers: next }));
+  };
+  const addTier = () => updateTiers([...tiers, { ...defaultPricingTier }]);
+  const removeTier = (i: number) => updateTiers(tiers.filter((_, idx) => idx !== i));
+  const setTier = (i: number, patch: Partial<PricingTier>) => {
+    const next = tiers.map((t, idx) => (idx === i ? { ...t, ...patch } : t));
+    updateTiers(next);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1337,6 +1369,88 @@ function RetreatFormModal({ retreat, onClose, onSave }: { retreat: Retreat | nul
                 onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                 className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none"
               />
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-bold uppercase tracking-widest text-stone-400">
+                  Pricing tiers
+                </label>
+                <button type="button" onClick={addTier} className="text-sm font-bold text-stone-900 hover:text-stone-600 flex items-center gap-1">
+                  <Plus size={14} /> Add tier
+                </button>
+              </div>
+              <p className="text-xs text-stone-500 mb-3">Age ranges (min/max years), name, and Free or price. Order by min age.</p>
+              <div className="space-y-4">
+                {tiers.map((tier, i) => (
+                  <div key={i} className="p-4 bg-stone-50 rounded-xl border border-stone-200 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-stone-500">Tier {i + 1}</span>
+                      <button type="button" onClick={() => removeTier(i)} className="p-1 hover:bg-stone-200 rounded text-red-600">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-stone-500 mb-1">Name</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Adult"
+                          value={tier.name}
+                          onChange={(e) => setTier(i, { name: e.target.value })}
+                          className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm"
+                        />
+                      </div>
+                      <div className="flex items-end gap-2">
+                        <div className="flex-1">
+                          <label className="block text-xs font-bold text-stone-500 mb-1">Min age</label>
+                          <input
+                            type="number"
+                            min={0}
+                            value={tier.minAge}
+                            onChange={(e) => setTier(i, { minAge: parseInt(e.target.value, 10) || 0 })}
+                            className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm"
+                          />
+                        </div>
+                        <span className="text-stone-400 pb-2">–</span>
+                        <div className="flex-1">
+                          <label className="block text-xs font-bold text-stone-500 mb-1">Max age (blank = no max)</label>
+                          <input
+                            type="number"
+                            min={0}
+                            placeholder="—"
+                            value={tier.maxAge ?? ''}
+                            onChange={(e) => setTier(i, { maxAge: e.target.value === '' ? null : parseInt(e.target.value, 10) || 0 })}
+                            className="w-full px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={tier.isFree}
+                          onChange={(e) => setTier(i, { isFree: e.target.checked, price: e.target.checked ? null : tier.price })}
+                          className="w-4 h-4 rounded border-stone-300 text-stone-900"
+                        />
+                        <span className="text-sm font-medium text-stone-900">Free</span>
+                      </label>
+                      {!tier.isFree && (
+                        <div className="flex items-center gap-2">
+                          <label className="text-sm font-medium text-stone-700">$</label>
+                          <input
+                            type="number"
+                            min={0}
+                            value={tier.price ?? ''}
+                            onChange={(e) => setTier(i, { price: e.target.value === '' ? null : parseInt(e.target.value, 10) || 0 })}
+                            className="w-20 px-3 py-2 bg-white border border-stone-200 rounded-lg text-sm"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>

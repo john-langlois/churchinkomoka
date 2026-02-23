@@ -7,7 +7,8 @@ import type {
   NewRetreatRegistration, 
   NewRetreatRegistrant,
   RetreatRegistration,
-  RetreatRegistrant 
+  RetreatRegistrant,
+  PricingTier
 } from '@/src/lib/db/schema/retreat';
 
 /**
@@ -74,6 +75,7 @@ export async function createRetreat(
     endDate?: Date | null;
     location?: string;
     isActive?: boolean;
+    pricingTiers?: PricingTier[] | null;
   }
 ): Promise<{ success: boolean; retreat: Retreat | null; error?: string }> {
   try {
@@ -84,6 +86,7 @@ export async function createRetreat(
       endDate: data.endDate || null,
       location: data.location || null,
       isActive: data.isActive ?? false,
+      pricingTiers: data.pricingTiers ?? null,
     };
 
     const [retreat] = await db
@@ -114,6 +117,7 @@ export async function updateRetreat(
     endDate?: Date | null;
     location?: string;
     isActive?: boolean;
+    pricingTiers?: PricingTier[] | null;
   }
 ): Promise<{ success: boolean; retreat: Retreat | null; error?: string }> {
   try {
@@ -127,6 +131,7 @@ export async function updateRetreat(
     if (data.endDate !== undefined) updateData.endDate = data.endDate || null;
     if (data.location !== undefined) updateData.location = data.location || null;
     if (data.isActive !== undefined) updateData.isActive = data.isActive;
+    if (data.pricingTiers !== undefined) updateData.pricingTiers = data.pricingTiers ?? null;
 
     const [retreat] = await db
       .update(retreats)
@@ -342,6 +347,40 @@ export async function getAllRetreatRegistrations(retreatId?: string): Promise<Re
     return registrations;
   } catch (error) {
     console.error('Error in getAllRetreatRegistrations:', error);
+    return [];
+  }
+}
+
+/**
+ * Get all registrants for a retreat, joined with their parent registration
+ */
+export async function getRetreatRegistrantsWithRegistrations(retreatId: string) {
+  try {
+    const results = await db
+      .select({
+        registrant: retreatRegistrants,
+        registration: {
+          id: retreatRegistrations.id,
+          contactName: retreatRegistrations.contactName,
+          contactEmail: retreatRegistrations.contactEmail,
+          contactPhone: retreatRegistrations.contactPhone,
+          status: retreatRegistrations.status,
+          type: retreatRegistrations.type,
+          notes: retreatRegistrations.notes,
+          createdAt: retreatRegistrations.createdAt,
+        },
+      })
+      .from(retreatRegistrants)
+      .innerJoin(
+        retreatRegistrations,
+        eq(retreatRegistrants.registrationId, retreatRegistrations.id)
+      )
+      .where(eq(retreatRegistrations.retreatId, retreatId))
+      .orderBy(retreatRegistrations.createdAt);
+
+    return results;
+  } catch (error) {
+    console.error('Error in getRetreatRegistrantsWithRegistrations:', error);
     return [];
   }
 }

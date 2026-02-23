@@ -10,7 +10,9 @@ import {
   updateEvent,
   deleteEvent,
   getEventsForDisplay,
+  calculateNextOccurrence,
 } from '@/src/services/eventService';
+import { sendCalendarInviteEmail } from '@/src/services/emailService';
 
 // Helper to check if user is admin from request headers
 async function checkAdminFromRequest(request: Request): Promise<boolean> {
@@ -85,6 +87,25 @@ const events = new Hono()
 
     return c.json({ event });
   })
+  .post('/send-ics',
+    zValidator('json', z.object({
+      eventId: z.string().min(1),
+      email: z.string().email(),
+    })),
+    async (c) => {
+      const { eventId, email } = c.req.valid('json');
+      const event = await getEventById(eventId);
+      if (!event) {
+        return c.json({ error: 'Event not found' }, 404);
+      }
+      const nextOccurrence = event.isRecurring ? calculateNextOccurrence(event) : null;
+      const result = await sendCalendarInviteEmail(email, event, nextOccurrence);
+      if (!result.success) {
+        return c.json({ error: result.error || 'Failed to send email' }, 500);
+      }
+      return c.json({ message: 'Calendar invite sent' });
+    }
+  )
   .post(
     '/',
     zValidator('json', createEventSchema),

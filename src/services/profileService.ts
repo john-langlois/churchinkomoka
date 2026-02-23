@@ -1,6 +1,6 @@
 import { db } from '@/src/lib/db/connection';
 import { profiles } from '@/src/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNotNull } from 'drizzle-orm';
 import type { Profile, NewProfile } from '@/src/lib/db/schema/profiles';
 
 /**
@@ -224,5 +224,24 @@ export async function getProfileById(userId: string): Promise<Profile | null> {
   } catch (error) {
     console.error('Error in getProfileById:', error);
     return null;
+  }
+}
+
+/**
+ * Get email addresses of all admin profiles
+ */
+export async function getAdminEmails(): Promise<string[]> {
+  try {
+    const admins = await db
+      .select({ email: profiles.email })
+      .from(profiles)
+      .where(and(eq(profiles.isAdmin, true), isNotNull(profiles.email)));
+
+    return admins
+      .map((a) => a.email)
+      .filter((e): e is string => !!e);
+  } catch (error) {
+    console.error('Error in getAdminEmails:', error);
+    return [];
   }
 }

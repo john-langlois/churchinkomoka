@@ -37,6 +37,7 @@
     "lucide-react": "^0.562.0",
     "next": "^16.0.0",
     "next-auth": "beta",
+    "next-video": "^2.6.0",
     "nuqs": "^2.8.6",
     "postgres": "^3.4.5",
     "react": "^19.2.3",

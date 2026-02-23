@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Clock, MapPin, Calendar as CalendarIcon, Bell } from 'lucide-react';
+import { X, Clock, MapPin, Calendar as CalendarIcon, Check } from 'lucide-react';
 import { format, isSameDay, parseISO } from 'date-fns';
 import { SectionHeader } from '@/src/components/SectionHeader';
 import { EventRow } from '@/src/components/EventRow';
@@ -17,8 +17,11 @@ type EventForDisplay = {
   location: string;
   time?: string;
   displayDate: string;
+  displayTime?: string;
   isRecurring: boolean;
   nextOccurrence?: string | Date;
+  startDate?: string | null;
+  endDate?: string | null;
 };
 
 type EventCategory = 'All' | 'Service' | 'Prayer' | 'Retreat' | 'Bible Study' | 'Outreach';
@@ -29,6 +32,10 @@ export default function CalendarPage() {
   const [selectedEvent, setSelectedEvent] = useState<EventForDisplay | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<EventCategory>('All');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [calendarEmail, setCalendarEmail] = useState('');
+  const [sendingICS, setSendingICS] = useState(false);
+  const [icsSent, setIcsSent] = useState(false);
+  const [showEmailInput, setShowEmailInput] = useState(false);
 
   useEffect(() => {
     fetchEvents();
@@ -47,15 +54,25 @@ export default function CalendarPage() {
     }
   };
 
-  // Get all unique dates that have events
+  // Get all unique dates that have events (multi-day events span all their days)
   const eventDates = useMemo(() => {
     const dates = new Set<string>();
     events.forEach(event => {
-      if (event.nextOccurrence) {
-        const date = typeof event.nextOccurrence === 'string' 
-          ? parseISO(event.nextOccurrence) 
+      if (event.isRecurring && event.nextOccurrence) {
+        const date = typeof event.nextOccurrence === 'string'
+          ? parseISO(event.nextOccurrence)
           : new Date(event.nextOccurrence);
         dates.add(format(date, 'yyyy-MM-dd'));
+      } else if (event.startDate) {
+        const start = parseISO(typeof event.startDate === 'string' ? event.startDate : new Date(event.startDate).toISOString());
+        const end = event.endDate
+          ? parseISO(typeof event.endDate === 'string' ? event.endDate : new Date(event.endDate).toISOString())
+          : start;
+        const current = new Date(start);
+        while (current <= end) {
+          dates.add(format(current, 'yyyy-MM-dd'));
+          current.setDate(current.getDate() + 1);
+        }
       }
     });
     return dates;
@@ -70,14 +87,23 @@ export default function CalendarPage() {
       filtered = filtered.filter(event => event.category === selectedCategory);
     }
 
-    // Filter by date if selected
+    // Filter by date if selected — multi-day events match any day in their range
     if (selectedDate) {
       filtered = filtered.filter(event => {
-        if (!event.nextOccurrence) return false;
-        const eventDate = typeof event.nextOccurrence === 'string' 
-          ? parseISO(event.nextOccurrence) 
-          : new Date(event.nextOccurrence);
-        return isSameDay(eventDate, selectedDate);
+        if (event.isRecurring) {
+          if (!event.nextOccurrence) return false;
+          const eventDate = typeof event.nextOccurrence === 'string'
+            ? parseISO(event.nextOccurrence)
+            : new Date(event.nextOccurrence);
+          return isSameDay(eventDate, selectedDate);
+        }
+        if (!event.startDate) return false;
+        const start = new Date(event.startDate);
+        const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+        const end = event.endDate ? new Date(event.endDate) : start;
+        const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+        const sel = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+        return sel >= startDay && sel <= endDay;
       });
     }
 
@@ -100,8 +126,8 @@ export default function CalendarPage() {
         <div className="flex flex-col lg:flex-row gap-16">
           {/* List View (2/3) */}
           <div className="lg:w-2/3">
-            <div className="flex items-center justify-between mb-12 border-b border-stone-200 pb-6">
-              <h2 className="text-2xl font-bold text-stone-900">Upcoming Events</h2>
+            <div className="mb-12 border-b border-stone-200 pb-6">
+              <h2 className="text-2xl font-bold text-stone-900 mb-4">Upcoming Events</h2>
               <div className="flex gap-2 flex-wrap">
                 {categories.map((category) => (
                   <button
@@ -133,6 +159,7 @@ export default function CalendarPage() {
                       ...event,
                       date: event.displayDate,
                       day: event.displayDate.split(',')[0] || 'Sun',
+                      time: event.displayTime || event.time,
                     }} />
                   </div>
                 ))
@@ -208,11 +235,6 @@ export default function CalendarPage() {
                   </button>
                   </div>
               )}
-              <div className="pt-8 border-t border-stone-100">
-                <button className="w-full py-4 bg-stone-50 border border-stone-200 rounded-xl text-stone-900 font-bold text-xs uppercase tracking-widest hover:bg-stone-100 transition-colors flex items-center justify-center gap-2">
-                  <Bell size={16} /> Subscribe to Updates
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -226,7 +248,7 @@ export default function CalendarPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setSelectedEvent(null)}
+              onClick={() => { setSelectedEvent(null); setShowEmailInput(false); setCalendarEmail(''); setIcsSent(false); }}
               className="absolute inset-0 bg-stone-900/80 backdrop-blur-sm"
             />
             <motion.div 
@@ -236,7 +258,7 @@ export default function CalendarPage() {
               className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden"
             >
               <button 
-                onClick={() => setSelectedEvent(null)}
+                onClick={() => { setSelectedEvent(null); setShowEmailInput(false); setCalendarEmail(''); setIcsSent(false); }}
                 className="absolute top-6 right-6 p-2 bg-white/20 hover:bg-white/40 rounded-full transition-colors z-10 text-white"
               >
                 <X />
@@ -257,7 +279,7 @@ export default function CalendarPage() {
                 <div className="grid grid-cols-2 gap-8">
                   <div className="space-y-2">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400 block">Time</span>
-                    <p className="font-bold text-stone-900 text-lg flex items-center gap-2"><Clock size={16} className="text-stone-400"/> {selectedEvent.time}</p>
+                    <p className="font-bold text-stone-900 text-lg flex items-center gap-2"><Clock size={16} className="text-stone-400"/> {selectedEvent.displayTime || selectedEvent.time || 'TBD'}</p>
                   </div>
                   <div className="space-y-2">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400 block">Location</span>
@@ -270,8 +292,56 @@ export default function CalendarPage() {
                   <p className="text-stone-600 leading-relaxed text-lg">{selectedEvent.description}</p>
                 </div>
 
-                <div className="pt-8 flex gap-4">
-                  <button className="flex-grow py-4 bg-stone-900 text-white rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-stone-700 transition-colors">Add to Calendar</button>
+                <div className="pt-8">
+                  {icsSent ? (
+                    <div className="flex items-center justify-center gap-2 py-4 bg-green-50 border border-green-200 rounded-xl text-green-700 font-bold text-sm">
+                      <Check size={16} /> Calendar invite sent! Check your email.
+                    </div>
+                  ) : showEmailInput ? (
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!selectedEvent || !calendarEmail) return;
+                        setSendingICS(true);
+                        try {
+                          const res = await fetch('/api/events/send-ics', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ eventId: selectedEvent.id, email: calendarEmail }),
+                          });
+                          if (res.ok) setIcsSent(true);
+                        } catch (err) {
+                          console.error('Error sending calendar invite:', err);
+                        } finally {
+                          setSendingICS(false);
+                        }
+                      }}
+                      className="flex gap-2"
+                    >
+                      <input
+                        type="email"
+                        required
+                        placeholder="Your email address"
+                        value={calendarEmail}
+                        onChange={(e) => setCalendarEmail(e.target.value)}
+                        className="flex-grow px-4 py-3 border border-stone-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-stone-900"
+                      />
+                      <button
+                        type="submit"
+                        disabled={sendingICS || !calendarEmail}
+                        className="px-6 py-3 bg-stone-900 text-white rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-stone-700 transition-colors disabled:opacity-50"
+                      >
+                        {sendingICS ? 'Sending...' : 'Send'}
+                      </button>
+                    </form>
+                  ) : (
+                    <button
+                      onClick={() => setShowEmailInput(true)}
+                      className="w-full py-4 bg-stone-900 text-white rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-stone-700 transition-colors"
+                    >
+                      Add to Calendar
+                    </button>
+                  )}
                 </div>
               </div>
             </motion.div>

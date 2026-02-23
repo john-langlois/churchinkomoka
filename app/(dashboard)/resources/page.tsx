@@ -167,11 +167,11 @@ export default function ResourcesPage() {
                       )}
                       {sermon.date && (
                         <span className="text-stone-500 text-sm font-medium">
-                          {format(new Date(sermon.date), 'LLL d, yyyy')}
+                          {format(new Date(sermon.date + 'T12:00:00'), 'LLL d, yyyy')}
                         </span>
                       )}
                     </div>
-                    <h3 className="text-2xl font-bold text-stone-900 mb-3 leading-tight group-hover:text-blue-600 transition-colors">{sermon.title}</h3>
+                    <h3 className="text-2xl font-bold text-stone-900 mb-3 leading-tight group-hover:text-stone-500 transition-colors">{sermon.title}</h3>
                     <p className="text-stone-500 text-sm font-medium mb-6">{sermon.speaker}</p>
                     <div className="flex items-center gap-4 pt-6 border-t border-stone-100">
                       {sermon.youtubeId && (

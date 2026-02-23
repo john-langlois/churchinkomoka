@@ -1,5 +1,14 @@
-import { pgTable, uuid, varchar, text, timestamp, integer, pgEnum, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, integer, pgEnum, boolean, jsonb } from 'drizzle-orm/pg-core';
 import { profiles } from './profiles';
+
+/** Dynamic pricing tier: age range, name, and free or price in dollars */
+export type PricingTier = {
+  name: string;
+  minAge: number;
+  maxAge: number | null; // inclusive; null = no upper bound
+  price: number | null;  // dollars; used when isFree is false
+  isFree: boolean;
+};
 
 // Registration type enum
 export const registrationTypeEnum = pgEnum('registration_type', ['individual', 'family']);
@@ -21,6 +30,7 @@ export const retreats = pgTable('retreats', {
   endDate: timestamp('end_date'),
   location: varchar('location', { length: 255 }),
   isActive: boolean('is_active').default(false).notNull(),
+  pricingTiers: jsonb('pricing_tiers').$type<PricingTier[]>(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

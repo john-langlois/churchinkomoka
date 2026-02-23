@@ -3,8 +3,11 @@ import { events } from '@/src/lib/db/schema';
 import { eq, and, gte, or, isNull, desc, asc } from 'drizzle-orm';
 import type { Event, NewEvent } from '@/src/lib/db/schema/events';
 
+const TZ = 'America/New_York';
+
 export type EventForDisplay = Event & {
   displayDate: string;
+  displayTime: string;
   nextOccurrence?: Date;
   isUpcoming: boolean;
 };
@@ -18,7 +21,8 @@ export function calculateNextOccurrence(event: Event): Date | null {
   }
 
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const estParts = now.toLocaleDateString('en-US', { timeZone: TZ }).split('/');
+  const today = new Date(parseInt(estParts[2]), parseInt(estParts[0]) - 1, parseInt(estParts[1]));
 
   // Check if recurrence has ended
   if (event.recurrenceEndDate) {
@@ -102,28 +106,66 @@ export function calculateNextOccurrence(event: Event): Date | null {
  * Format event date for display
  */
 function formatEventDate(event: Event, nextOccurrence?: Date | null): string {
+  const options: Intl.DateTimeFormatOptions = { 
+    weekday: 'short', 
+    month: 'short', 
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: TZ,
+  };
+
   if (event.isRecurring && nextOccurrence) {
-    const options: Intl.DateTimeFormatOptions = { 
-      weekday: 'short', 
-      month: 'short', 
-      day: 'numeric',
-      year: 'numeric'
-    };
     return `Next: ${nextOccurrence.toLocaleDateString('en-US', options)}`;
   }
   
   if (event.startDate) {
     const startDate = new Date(event.startDate);
-    const options: Intl.DateTimeFormatOptions = { 
-      weekday: 'short', 
-      month: 'short', 
-      day: 'numeric',
-      year: 'numeric'
-    };
-    return startDate.toLocaleDateString('en-US', options);
+    const startStr = startDate.toLocaleDateString('en-US', options);
+
+    if (event.endDate) {
+      const endDate = new Date(event.endDate);
+      const startDayStr = startDate.toLocaleDateString('en-US', { timeZone: TZ });
+      const endDayStr = endDate.toLocaleDateString('en-US', { timeZone: TZ });
+      if (startDayStr !== endDayStr) {
+        const endStr = endDate.toLocaleDateString('en-US', options);
+        return `${startStr} – ${endStr}`;
+      }
+    }
+
+    return startStr;
   }
 
   return 'Date TBD';
+}
+
+function formatTime12h(date: Date): string {
+  return date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: TZ,
+  }).replace(':00 ', ' ').replace(':00\u202f', '\u202f');
+}
+
+function formatDateShort(date: Date): string {
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: TZ });
+}
+
+function formatEventTime(event: Event): string {
+  if (event.startDate) {
+    const start = new Date(event.startDate);
+    if (event.endDate) {
+      const end = new Date(event.endDate);
+      const startDay = start.toLocaleDateString('en-US', { timeZone: TZ });
+      const endDay = end.toLocaleDateString('en-US', { timeZone: TZ });
+      if (startDay === endDay) {
+        return `${formatTime12h(start)} – ${formatTime12h(end)}`;
+      }
+      return `${formatDateShort(start)}, ${formatTime12h(start)} – ${formatDateShort(end)}, ${formatTime12h(end)}`;
+    }
+    return formatTime12h(start);
+  }
+  return event.time || 'TBD';
 }
 
 /**
@@ -179,6 +221,7 @@ export async function getUpcomingEvents(limit?: number): Promise<EventForDisplay
         eventsForDisplay.push({
           ...event,
           displayDate: formatEventDate(event, nextOccurrence),
+          displayTime: formatEventTime(event),
           nextOccurrence: nextOccurrence || undefined,
           isUpcoming,
         });
@@ -215,6 +258,7 @@ export async function getEventsForDisplay(): Promise<EventForDisplay[]> {
       return {
         ...event,
         displayDate: formatEventDate(event, nextOccurrence),
+        displayTime: formatEventTime(event),
         nextOccurrence: nextOccurrence || undefined,
         isUpcoming: nextOccurrence ? nextOccurrence >= new Date() : false,
       };

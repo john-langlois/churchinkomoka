@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { ChevronRight, Music } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { SpotifyIcon } from '@/src/components/SpotifyIcon';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -19,9 +18,12 @@ type Sermon = {
   articleContent?: string; // Markdown content as string
 };
 
-export default function SermonDetailPage() {
-  const params = useParams();
-  const id = params.id as string;
+export default function SermonDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
   const [sermon, setSermon] = useState<Sermon | null>(null);
   const [loading, setLoading] = useState(true);
 
