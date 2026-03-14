@@ -68,17 +68,34 @@ export const Navbar = () => {
         </Link>
 
         {/* Desktop Menu */}
-        <div
-          className={cn(
-            'hidden md:flex items-center space-x-8 font-medium text-sm tracking-wide uppercase transition-colors duration-300',
-            useDarkText ? 'text-stone-600 hover:text-stone-900' : 'text-white/80 hover:text-white'
-          )}
-        >
-          {links.slice(1).map((link) => (
-            <Link key={link.href} href={link.href} className="transition-colors">
-              {link.label}
-            </Link>
-          ))}
+        <div className="hidden md:flex items-center space-x-8">
+          {links.slice(1).map((link) => {
+            const isActive = pathname === link.href;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={cn(
+                  'relative font-medium text-sm tracking-wide uppercase transition-colors duration-300 py-1',
+                  useDarkText
+                    ? isActive ? 'text-stone-900' : 'text-stone-500 hover:text-stone-900'
+                    : isActive ? 'text-white' : 'text-white/70 hover:text-white'
+                )}
+              >
+                {link.label}
+                {isActive && (
+                  <motion.span
+                    layoutId="nav-underline"
+                    className={cn(
+                      'absolute bottom-0 left-0 right-0 h-[2px] rounded-full',
+                      useDarkText ? 'bg-stone-900' : 'bg-white'
+                    )}
+                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                  />
+                )}
+              </Link>
+            );
+          })}
         </div>
 
         {/* Mobile: Animated burger that becomes X */}
@@ -170,7 +187,12 @@ export const Navbar = () => {
                       <Link
                         href={link.href}
                         onClick={() => setMobileOpen(false)}
-                        className="block text-3xl sm:text-4xl font-black text-stone-900 hover:text-blue-600 transition-colors py-3 tracking-tighter uppercase"
+                        className={cn(
+                          'block text-3xl sm:text-4xl font-black transition-colors py-3 tracking-tighter uppercase',
+                          pathname === link.href
+                            ? 'text-stone-900 underline underline-offset-4 decoration-2'
+                            : 'text-stone-400 hover:text-stone-900'
+                        )}
                       >
                         {link.label}
                       </Link>

@@ -51,7 +51,7 @@ export default function HomePage() {
   );
   const [loading, setLoading] = useState(true);
   const [sermonLoading, setSermonLoading] = useState(true);
-  const [calendarEmail, setCalendarEmail] = useState('');
+  const [calendarEmail, setCalendarEmail] = useState("");
   const [sendingICS, setSendingICS] = useState(false);
   const [icsSent, setIcsSent] = useState(false);
   const [showEmailInput, setShowEmailInput] = useState(false);
@@ -220,23 +220,84 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* Join Us Section */}
+      <section className="py-20 md:py-28 px-6 md:px-12 bg-white">
+        <div className="max-w-[1400px] mx-auto">
+          <h2 className="text-4xl md:text-6xl font-black tracking-tighter text-stone-900 mb-12 md:mb-16 max-w-2xl leading-tight">
+            You&apos;re welcome here every Sunday.
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-stone-900 text-white rounded-3xl p-8 md:p-10">
+              <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center mb-6">
+                <Clock size={20} className="text-white" />
+              </div>
+              <p className="text-xs font-bold uppercase tracking-widest text-white/40 mb-2">
+                When
+              </p>
+              <p className="text-3xl font-black tracking-tight mb-1">
+                10:00 AM
+              </p>
+              <p className="text-white/60 font-medium">Every Sunday morning</p>
+            </div>
+            <div className="bg-stone-100 rounded-3xl p-8 md:p-10">
+              <div className="w-12 h-12 rounded-2xl bg-stone-200 flex items-center justify-center mb-6">
+                <MapPin size={20} className="text-stone-700" />
+              </div>
+              <p className="text-xs font-bold uppercase tracking-widest text-stone-400 mb-2">
+                Where
+              </p>
+              <p className="text-3xl font-black tracking-tight text-stone-900 mb-1">
+                Komoka, ON
+              </p>
+              <a
+                href="https://www.google.com/maps/search/?api=1&query=93+Queen+St+Komoka+ON+N0L+1R0"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-stone-500 font-medium hover:text-stone-900 transition-colors underline underline-offset-2"
+              >
+                93 Queen St — Providence Collegiate
+              </a>
+            </div>
+            <a
+              href="https://www.youtube.com/@churchinkomoka"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-stone-100 rounded-3xl p-8 md:p-10 hover:bg-stone-200 transition-colors group block"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-stone-200 group-hover:bg-red-500 flex items-center justify-center mb-6 transition-colors">
+                <PlayCircle size={20} className="text-stone-700 group-hover:text-white transition-colors" />
+              </div>
+              <p className="text-xs font-bold uppercase tracking-widest text-stone-400 mb-2">
+                Can&apos;t make it?
+              </p>
+              <p className="text-3xl font-black tracking-tight text-stone-900 mb-1">
+                Watch Live
+              </p>
+              <p className="text-stone-500 font-medium">
+                Streaming on YouTube every Sunday
+              </p>
+            </a>
+          </div>
+        </div>
+      </section>
+
       {/* Mission Statement Section */}
-      <section className="py-24 md:py-32 px-6 md:px-12 bg-white">
+      <section className="py-24 md:py-32 px-6 md:px-12 bg-stone-900">
         <div className="max-w-[1400px] mx-auto">
           <div className="max-w-4xl mx-auto text-center space-y-8">
-            <p className="text-xl md:text-2xl text-stone-700 leading-relaxed font-medium">
+            <p className="text-xl md:text-2xl text-white/80 leading-relaxed font-medium">
               We are a group of disciples in Komoka who live to serve and follow
               Jesus. Our mission is to lead others to a life changing
               relationship with our Creator.
             </p>
-            <div className="pt-8 border-t border-stone-200">
-              <blockquote className="text-lg md:text-xl text-stone-600 italic leading-relaxed mb-4">
+            <div className="pt-8 border-t border-white/10">
+              <blockquote className="text-lg md:text-xl text-white/60 italic leading-relaxed mb-4">
                 "Go therefore and make disciples of all the nations, baptizing
                 them in the name of the Father and the Son and the Holy Spirit,
                 teaching them to observe all that I commanded you; and lo, I am
                 with you always, even to the end of the age."
               </blockquote>
-              <p className="text-stone-500 font-medium">Matthew 28:19-20</p>
+              <p className="text-white/40 font-medium">Matthew 28:19-20</p>
             </div>
           </div>
         </div>
@@ -426,7 +487,12 @@ export default function HomePage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => { setSelectedEvent(null); setShowEmailInput(false); setCalendarEmail(''); setIcsSent(false); }}
+              onClick={() => {
+                setSelectedEvent(null);
+                setShowEmailInput(false);
+                setCalendarEmail("");
+                setIcsSent(false);
+              }}
               className="absolute inset-0 bg-stone-900/80 backdrop-blur-sm"
             />
             <motion.div
@@ -437,7 +503,12 @@ export default function HomePage() {
               className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden"
             >
               <button
-                onClick={() => { setSelectedEvent(null); setShowEmailInput(false); setCalendarEmail(''); setIcsSent(false); }}
+                onClick={() => {
+                  setSelectedEvent(null);
+                  setShowEmailInput(false);
+                  setCalendarEmail("");
+                  setIcsSent(false);
+                }}
                 className="absolute top-6 right-6 p-2 bg-white/20 hover:bg-white/40 rounded-full transition-colors z-10 text-white"
               >
                 <X />
@@ -496,7 +567,8 @@ export default function HomePage() {
                 <div className="pt-8">
                   {icsSent ? (
                     <div className="flex items-center justify-center gap-2 py-4 bg-green-50 border border-green-200 rounded-xl text-green-700 font-bold text-sm">
-                      <Check size={16} /> Calendar invite sent! Check your email.
+                      <Check size={16} /> Calendar invite sent! Check your
+                      email.
                     </div>
                   ) : showEmailInput ? (
                     <form
@@ -505,14 +577,17 @@ export default function HomePage() {
                         if (!selectedEvent || !calendarEmail) return;
                         setSendingICS(true);
                         try {
-                          const res = await fetch('/api/events/send-ics', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ eventId: selectedEvent.id, email: calendarEmail }),
+                          const res = await fetch("/api/events/send-ics", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              eventId: selectedEvent.id,
+                              email: calendarEmail,
+                            }),
                           });
                           if (res.ok) setIcsSent(true);
                         } catch (err) {
-                          console.error('Error sending calendar invite:', err);
+                          console.error("Error sending calendar invite:", err);
                         } finally {
                           setSendingICS(false);
                         }
@@ -532,7 +607,7 @@ export default function HomePage() {
                         disabled={sendingICS || !calendarEmail}
                         className="px-6 py-3 bg-stone-900 text-white rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-stone-700 transition-colors disabled:opacity-50"
                       >
-                        {sendingICS ? 'Sending...' : 'Send'}
+                        {sendingICS ? "Sending..." : "Send"}
                       </button>
                     </form>
                   ) : (
