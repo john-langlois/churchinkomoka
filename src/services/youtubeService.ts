@@ -22,9 +22,7 @@ async function ensureYtDlp(): Promise<string> {
 }
 
 function makeYtDlp(binaryPath: string) {
-  const instance = new YtDlp();
-  instance.setBinaryPath(binaryPath);
-  return instance;
+  return new YtDlp({ binaryPath });
 }
 
 export interface YouTubeVideoInfo {
