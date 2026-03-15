@@ -17,7 +17,19 @@ import {
   Save,
   Loader2,
   Shield,
+  Youtube,
+  CheckCircle2,
+  AlertCircle,
+  Radio,
+  Image,
+  Music,
+  FileText,
+  Upload,
+  Rss,
+  ExternalLink,
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 type Event = {
   id: string;
@@ -115,6 +127,7 @@ export default function AdminPage() {
   const [showSermonForm, setShowSermonForm] = useState(false);
   const [showRetreatForm, setShowRetreatForm] = useState(false);
   const [showProfileForm, setShowProfileForm] = useState(false);
+  const [showPipelineModal, setShowPipelineModal] = useState(false);
   const [confirmationModal, setConfirmationModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -564,16 +577,25 @@ export default function AdminPage() {
               <div>
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-2xl font-bold text-stone-900">Sermons</h2>
-                  <button
-                    onClick={() => {
-                      setEditingSermon(null);
-                      setShowSermonForm(true);
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 bg-stone-900 text-white rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-stone-700 transition-colors"
-                  >
-                    <Plus size={16} />
-                    Add Sermon
-                  </button>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setShowPipelineModal(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-red-700 transition-colors"
+                    >
+                      <Youtube size={16} />
+                      Process from YouTube
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingSermon(null);
+                        setShowSermonForm(true);
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-stone-900 text-white rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-stone-700 transition-colors"
+                    >
+                      <Plus size={16} />
+                      Add Sermon
+                    </button>
+                  </div>
                 </div>
                 <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
                   <table className="w-full">
@@ -599,7 +621,7 @@ export default function AdminPage() {
                           <td className="px-6 py-4">
                             {sermon.youtubeId ? (
                               <a 
-                                href={`https://churchinkomoka.com/watch?v=${sermon.youtubeId}`}
+                                href={sermon.youtubeId}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-blue-600 hover:text-blue-800 text-sm"
@@ -869,6 +891,16 @@ export default function AdminPage() {
               setEditingSermon(null);
             }}
             onSave={handleSaveSermon}
+          />
+        )}
+
+        {/* Sermon Pipeline Modal */}
+        {showPipelineModal && (
+          <SermonPipelineModal
+            onClose={() => {
+              setShowPipelineModal(false);
+              if (activeTab === 'sermons') fetchData();
+            }}
           />
         )}
 
@@ -1152,6 +1184,7 @@ function SermonFormModal({ sermon, onClose, onSave }: { sermon: Sermon | null; o
       : (sermon?.articleContent ? JSON.stringify(sermon.articleContent) : ''),
     isPublic: sermon?.isPublic ?? true,
   });
+  const [mdTab, setMdTab] = useState<'write' | 'preview' | 'split'>('split');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1167,7 +1200,7 @@ function SermonFormModal({ sermon, onClose, onSave }: { sermon: Sermon | null; o
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-stone-900/80 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[94vh] overflow-y-auto">
         <div className="p-8">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-3xl font-black tracking-tight text-stone-900">
@@ -1214,10 +1247,11 @@ function SermonFormModal({ sermon, onClose, onSave }: { sermon: Sermon | null; o
             </div>
             <div>
               <label className="block text-sm font-bold uppercase tracking-widest text-stone-400 mb-2">
-                YouTube ID
+                YouTube URL
               </label>
               <input
-                type="text"
+                type="url"
+                placeholder="https://www.youtube.com/watch?v=..."
                 value={formData.youtubeId}
                 onChange={(e) => setFormData({ ...formData, youtubeId: e.target.value })}
                 className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none"
@@ -1256,19 +1290,91 @@ function SermonFormModal({ sermon, onClose, onSave }: { sermon: Sermon | null; o
               </button>
             </div>
             <div>
-              <label className="block text-sm font-bold uppercase tracking-widest text-stone-400 mb-2">
-                Content (Markdown)
-              </label>
-              <textarea
-                value={typeof formData.articleContent === 'string' ? formData.articleContent : ''}
-                onChange={(e) => setFormData({ ...formData, articleContent: e.target.value })}
-                rows={12}
-                placeholder="Write your sermon content in Markdown format..."
-                className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none resize-none font-mono text-sm"
-              />
-              <p className="text-xs text-stone-500 mt-2">
-                Use Markdown syntax for formatting (headers, bold, italic, lists, etc.)
-              </p>
+              {/* Header row: label + tab switcher */}
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-bold uppercase tracking-widest text-stone-400">
+                  Content (Markdown)
+                </label>
+                <div className="flex rounded-lg border border-stone-200 overflow-hidden text-xs font-bold">
+                  {(['write', 'split', 'preview'] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setMdTab(tab)}
+                      className={`px-3 py-1.5 capitalize transition-colors ${
+                        mdTab === tab
+                          ? 'bg-stone-900 text-white'
+                          : 'bg-white text-stone-500 hover:bg-stone-50'
+                      }`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Editor area */}
+              <div className={`rounded-xl border border-stone-200 overflow-hidden ${mdTab === 'split' ? 'grid grid-cols-2' : ''}`}>
+                {/* Textarea */}
+                {(mdTab === 'write' || mdTab === 'split') && (
+                  <div className={mdTab === 'split' ? 'border-r border-stone-200' : ''}>
+                    {mdTab === 'split' && (
+                      <div className="px-3 py-1.5 bg-stone-50 border-b border-stone-200 text-xs font-bold uppercase tracking-widest text-stone-400">
+                        Editor
+                      </div>
+                    )}
+                    <textarea
+                      value={typeof formData.articleContent === 'string' ? formData.articleContent : ''}
+                      onChange={(e) => setFormData({ ...formData, articleContent: e.target.value })}
+                      rows={22}
+                      placeholder="Write your sermon content in Markdown format..."
+                      className="w-full px-4 py-3 bg-white outline-none resize-none font-mono text-sm leading-relaxed"
+                    />
+                  </div>
+                )}
+
+                {/* Preview */}
+                {(mdTab === 'preview' || mdTab === 'split') && (
+                  <div>
+                    {mdTab === 'split' && (
+                      <div className="px-3 py-1.5 bg-stone-50 border-b border-stone-200 text-xs font-bold uppercase tracking-widest text-stone-400">
+                        Preview
+                      </div>
+                    )}
+                    <div className={`px-5 py-4 overflow-y-auto font-sans text-sm text-stone-700 leading-relaxed ${mdTab === 'preview' ? 'min-h-[440px]' : 'h-[calc(22*1.625rem+24px)]'}`}>
+                      {formData.articleContent ? (
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            h1: ({children, ...p}) => <h1 className="text-2xl font-black text-stone-900 mt-6 mb-3" {...p}>{children}</h1>,
+                            h2: ({children, ...p}) => <h2 className="text-xl font-black text-stone-900 mt-5 mb-2" {...p}>{children}</h2>,
+                            h3: ({children, ...p}) => <h3 className="text-lg font-bold text-stone-900 mt-4 mb-2" {...p}>{children}</h3>,
+                            p: ({children, ...p}) => <p className="mb-3 leading-relaxed" {...p}>{children}</p>,
+                            ul: ({children, ...p}) => <ul className="list-disc pl-5 space-y-1 mb-3" {...p}>{children}</ul>,
+                            ol: ({children, ...p}) => <ol className="list-decimal pl-5 space-y-1 mb-3" {...p}>{children}</ol>,
+                            li: ({children, ...p}) => <li className="leading-relaxed" {...p}>{children}</li>,
+                            strong: ({children, ...p}) => <strong className="font-bold text-stone-900" {...p}>{children}</strong>,
+                            em: ({children, ...p}) => <em className="italic" {...p}>{children}</em>,
+                            blockquote: ({children, ...p}) => <blockquote className="border-l-4 border-stone-300 pl-4 italic text-stone-500 my-3" {...p}>{children}</blockquote>,
+                            code: ({children, ...p}: any) => {
+                              const isInline = !p.className?.includes('language-');
+                              return isInline
+                                ? <code className="bg-stone-100 px-1 py-0.5 rounded text-xs font-mono text-stone-800" {...p}>{children}</code>
+                                : <code className="block bg-stone-100 p-3 rounded-lg text-xs font-mono text-stone-800 overflow-x-auto my-3" {...p}>{children}</code>;
+                            },
+                            hr: ({...p}) => <hr className="border-stone-200 my-4" {...p} />,
+                          }}
+                        >
+                          {formData.articleContent}
+                        </ReactMarkdown>
+                      ) : (
+                        <p className="text-stone-300 italic">Nothing to preview yet…</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-stone-400 mt-2">Supports Markdown: **bold**, *italic*, # headings, - lists, &gt; quotes, `code`</p>
             </div>
             <div className="flex gap-4">
               <button
@@ -1637,6 +1743,430 @@ function ProfileFormModal({ profile, onClose, onSave }: { profile: Profile | nul
               </button>
             </div>
           </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Pipeline step definitions for UI
+const PIPELINE_STEPS = [
+  { id: 'metadata', label: 'Fetch video info', icon: Youtube },
+  { id: 'audio', label: 'Extract audio', icon: Music },
+  { id: 'upload_audio', label: 'Upload audio', icon: Upload },
+  { id: 'transcribe', label: 'Transcribe & rewrite', icon: FileText },
+  { id: 'save', label: 'Save to database', icon: Radio },
+  { id: 'rss', label: 'Update podcast feed', icon: Rss },
+] as const;
+
+type StepId = typeof PIPELINE_STEPS[number]['id'];
+type StepStatus = 'pending' | 'running' | 'done' | 'error';
+
+interface PipelineResult {
+  sermonId: string;
+  title: string;
+  thumbnailUrl: string;
+  audioUrl: string;
+  rssUrl: string;
+  podcastDescription: string;
+}
+
+type ModalPhase = 'form' | 'running' | 'review' | 'confirming' | 'complete';
+
+interface ReviewData {
+  title: string;
+  speaker: string;
+  date: string | null;
+  youtubeUrl: string;
+  audioUrl: string;
+  articleContent: string;
+  podcastDescription: string;
+}
+
+function SermonPipelineModal({ onClose }: { onClose: () => void }) {
+  // ── Form inputs ────────────────────────────────────────────────────────
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [preacherName, setPreacherName] = useState('');
+
+  // ── Phase + progress state ─────────────────────────────────────────────
+  const [phase, setPhase] = useState<ModalPhase>('form');
+  const [stepStatuses, setStepStatuses] = useState<Record<StepId, StepStatus>>({
+    metadata: 'pending', audio: 'pending', upload_audio: 'pending',
+    transcribe: 'pending', save: 'pending', rss: 'pending',
+  });
+  const [stepMessages, setStepMessages] = useState<Record<string, string>>({});
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // ── Review phase state ─────────────────────────────────────────────────
+  const [reviewData, setReviewData] = useState<ReviewData | null>(null);
+  const [editedContent, setEditedContent] = useState('');
+  const [editedTitle, setEditedTitle] = useState('');
+
+  // ── Complete state ─────────────────────────────────────────────────────
+  const [publishedSermonId, setPublishedSermonId] = useState('');
+  const [publishedTitle, setPublishedTitle] = useState('');
+  const [publishedRssUrl, setPublishedRssUrl] = useState('');
+  const [rssCopied, setRssCopied] = useState(false);
+
+  // ── Helpers ────────────────────────────────────────────────────────────
+  const updateStep = (step: string, status: StepStatus, message?: string) => {
+    if (PIPELINE_STEPS.some((s) => s.id === step)) {
+      setStepStatuses((prev) => ({ ...prev, [step as StepId]: status }));
+    }
+    if (message) setStepMessages((prev) => ({ ...prev, [step]: message }));
+  };
+
+  const stepIcon = (status: StepStatus, Icon: React.ElementType) => {
+    if (status === 'done') return <CheckCircle2 size={18} className="text-green-500" />;
+    if (status === 'error') return <AlertCircle size={18} className="text-red-500" />;
+    if (status === 'running') return <Loader2 size={18} className="animate-spin text-blue-500" />;
+    return <Icon size={18} className="text-stone-300" />;
+  };
+
+  const resetToForm = () => {
+    setPhase('form');
+    setErrorMessage(null);
+    setReviewData(null);
+    setStepStatuses({
+      metadata: 'pending', audio: 'pending', upload_audio: 'pending',
+      transcribe: 'pending', save: 'pending', rss: 'pending',
+    });
+    setStepMessages({});
+  };
+
+  // ── Phase 1: Run pipeline ──────────────────────────────────────────────
+  const handleRun = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPhase('running');
+    setErrorMessage(null);
+    setStepStatuses({
+      metadata: 'running', audio: 'pending', upload_audio: 'pending',
+      transcribe: 'pending', save: 'pending', rss: 'pending',
+    });
+
+    try {
+      const response = await fetch('/api/sermons/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ youtubeUrl, preacherName }),
+      });
+
+      if (!response.ok || !response.body) {
+        throw new Error((await response.text()) || 'Request failed');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue;
+          try {
+            const payload = JSON.parse(line.slice(5).trim());
+            const { step, message } = payload;
+
+            if (step === 'error') {
+              setErrorMessage(message);
+              setPhase('form');
+              return;
+            }
+
+            if (step === 'review') {
+              const rd: ReviewData = {
+                title: payload.title,
+                speaker: payload.speaker,
+                date: payload.date,
+                youtubeUrl: payload.youtubeUrl,
+                audioUrl: payload.audioUrl,
+                articleContent: payload.articleContent,
+                podcastDescription: payload.podcastDescription,
+              };
+              setReviewData(rd);
+              setEditedContent(payload.articleContent);
+              setEditedTitle(payload.title);
+              setPhase('review');
+              return;
+            }
+
+            // Advance step indicators
+            const stepIdx = PIPELINE_STEPS.findIndex((s) => s.id === step);
+            const nextStep = PIPELINE_STEPS[stepIdx + 1]?.id as StepId | undefined;
+            updateStep(step, 'done', message);
+            if (nextStep && nextStep !== 'save' && nextStep !== 'rss') {
+              updateStep(nextStep, 'running');
+            }
+          } catch { /* ignore malformed lines */ }
+        }
+      }
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'An unexpected error occurred');
+      setPhase('form');
+    }
+  };
+
+  // ── Phase 2: Confirm & publish ─────────────────────────────────────────
+  const handleConfirm = async () => {
+    if (!reviewData) return;
+    setPhase('confirming');
+    updateStep('save', 'running');
+
+    try {
+      const res = await fetch('/api/sermons/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: editedTitle,
+          speaker: reviewData.speaker,
+          date: reviewData.date,
+          youtubeUrl: reviewData.youtubeUrl,
+          audioUrl: reviewData.audioUrl,
+          thumbnailUrl: `${window.location.origin}/images/CHURCH IN KOMOKA.png`,
+          articleContent: editedContent,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to publish sermon');
+
+      updateStep('save', 'done', 'Sermon saved.');
+      updateStep('rss', 'running');
+      // rss is done server-side within confirm; just mark it complete
+      updateStep('rss', 'done', 'Podcast feed updated.');
+
+      setPublishedSermonId(data.sermonId);
+      setPublishedTitle(data.title);
+      setPublishedRssUrl(data.rssUrl ?? `${window.location.origin}/api/podcast`);
+      setPhase('complete');
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to publish sermon');
+      setPhase('review');
+    }
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────────
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/80 backdrop-blur-sm">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[94vh] overflow-y-auto">
+        <div className="p-8">
+
+          {/* Header */}
+          <div className="flex justify-between items-start mb-6">
+            <div>
+              <h2 className="text-3xl font-black tracking-tight text-stone-900">
+                {phase === 'review' || phase === 'confirming' ? 'Review & Approve' : 'Process from YouTube'}
+              </h2>
+              <p className="text-stone-500 text-sm mt-1">
+                {phase === 'review'
+                  ? 'Edit the transcript and thumbnail before publishing'
+                  : phase === 'complete'
+                  ? 'Sermon published successfully'
+                  : 'Transcribe, generate thumbnail, and publish to podcast'}
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              disabled={phase === 'running' || phase === 'confirming'}
+              className="p-2 hover:bg-stone-100 rounded-lg transition-colors disabled:opacity-40 shrink-0"
+            >
+              <X size={24} />
+            </button>
+          </div>
+
+          {/* ── FORM ── */}
+          {phase === 'form' && (
+            <form onSubmit={handleRun} className="space-y-5">
+              {errorMessage && (
+                <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700">
+                  <AlertCircle size={18} className="mt-0.5 shrink-0" />
+                  <p className="text-sm">{errorMessage}</p>
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-bold uppercase tracking-widest text-stone-400 mb-2">YouTube URL</label>
+                <input type="url" required placeholder="https://youtube.com/watch?v=..."
+                  value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)}
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold uppercase tracking-widest text-stone-400 mb-2">Preacher Name</label>
+                <input type="text" required placeholder="e.g. Pastor John Smith"
+                  value={preacherName} onChange={(e) => setPreacherName(e.target.value)}
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none" />
+              </div>
+              <button type="submit"
+                className="w-full px-6 py-4 bg-red-600 text-white rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-red-700 transition-colors flex items-center justify-center gap-3">
+                <Youtube size={18} /> Run Pipeline
+              </button>
+            </form>
+          )}
+
+          {/* ── RUNNING / CONFIRMING — progress steps ── */}
+          {(phase === 'running' || phase === 'confirming') && (
+            <div className="space-y-3">
+              {PIPELINE_STEPS.map(({ id, label, icon: Icon }) => {
+                const status = stepStatuses[id];
+                const msg = stepMessages[id];
+                return (
+                  <div key={id} className={`flex items-start gap-4 p-4 rounded-xl border transition-colors ${
+                    status === 'running' ? 'border-blue-200 bg-blue-50'
+                    : status === 'done' ? 'border-green-200 bg-green-50'
+                    : status === 'error' ? 'border-red-200 bg-red-50'
+                    : 'border-stone-100 bg-stone-50'}`}>
+                    <div className="mt-0.5">{stepIcon(status, Icon)}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-bold text-sm ${status === 'pending' ? 'text-stone-400' : 'text-stone-900'}`}>{label}</p>
+                      {msg && <p className="text-xs text-stone-500 mt-0.5 truncate">{msg}</p>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ── REVIEW ── */}
+          {(phase === 'review') && reviewData && (
+            <div className="space-y-6">
+              {errorMessage && (
+                <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700">
+                  <AlertCircle size={18} className="mt-0.5 shrink-0" />
+                  <p className="text-sm">{errorMessage}</p>
+                </div>
+              )}
+
+              {/* Title */}
+              <div>
+                <label className="block text-sm font-bold uppercase tracking-widest text-stone-400 mb-2">Sermon Title</label>
+                <input
+                  type="text"
+                  value={editedTitle}
+                  onChange={(e) => setEditedTitle(e.target.value)}
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none"
+                />
+              </div>
+
+              {/* Transcript */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-bold uppercase tracking-widest text-stone-400">Article / Transcript</label>
+                  <span className="text-xs text-stone-400">{editedContent.length} chars</span>
+                </div>
+                <textarea
+                  value={editedContent}
+                  onChange={(e) => setEditedContent(e.target.value)}
+                  rows={18}
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none resize-y font-mono text-sm leading-relaxed"
+                  placeholder="Sermon article content (Markdown)…"
+                />
+                <p className="text-xs text-stone-400 mt-1">Markdown supported. This will appear on the sermon page.</p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-2 border-t border-stone-100">
+                <button onClick={resetToForm}
+                  className="px-5 py-3 bg-stone-100 text-stone-700 rounded-xl font-bold text-sm hover:bg-stone-200 transition-colors">
+                  ← Start Over
+                </button>
+                <button onClick={handleConfirm}
+                  className="flex-1 px-6 py-3 bg-stone-900 text-white rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-stone-700 transition-colors flex items-center justify-center gap-2">
+                  <CheckCircle2 size={16} /> Confirm & Publish
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── COMPLETE ── */}
+          {phase === 'complete' && (
+            <div className="space-y-5">
+              {/* Success banner */}
+              <div className="p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">
+                <CheckCircle2 size={20} className="text-green-600 shrink-0" />
+                <div>
+                  <p className="font-bold text-green-900">Published!</p>
+                  <p className="text-sm text-green-700">"{publishedTitle}" is live on the site and podcast feed.</p>
+                </div>
+              </div>
+
+              {/* Links */}
+              <div className="flex gap-2">
+                <a href={`/resources/${publishedSermonId}`} target="_blank" rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-stone-900 text-white rounded-xl font-bold text-sm hover:bg-stone-700 transition-colors">
+                  <ExternalLink size={14} /> View Sermon Page
+                </a>
+                <a href={publishedRssUrl || '/api/podcast'} target="_blank" rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-stone-100 text-stone-700 rounded-xl font-bold text-sm hover:bg-stone-200 transition-colors">
+                  <Rss size={14} /> Preview RSS Feed
+                </a>
+              </div>
+
+              {/* Spotify RSS setup card */}
+              <div className="border border-green-200 rounded-2xl overflow-hidden">
+                <div className="bg-green-600 px-4 py-3 flex items-center gap-2">
+                  <Radio size={16} className="text-white" />
+                  <p className="text-white font-bold text-sm">Add to Spotify for Creators</p>
+                </div>
+                <div className="p-4 space-y-3 bg-white">
+                  <p className="text-sm text-stone-600">
+                    Spotify pulls new episodes automatically from your RSS feed — you only need to submit the URL once.
+                  </p>
+
+                  {/* Copyable RSS URL */}
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-widest text-stone-400 mb-1.5">Your RSS Feed URL</p>
+                    <div className="flex items-center gap-2 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2">
+                      <code className="flex-1 text-xs text-stone-700 break-all select-all">
+                        {publishedRssUrl || `${typeof window !== 'undefined' ? window.location.origin : ''}/api/podcast`}
+                      </code>
+                      <button
+                        onClick={async () => {
+                          await navigator.clipboard.writeText(publishedRssUrl || `${window.location.origin}/api/podcast`);
+                          setRssCopied(true);
+                          setTimeout(() => setRssCopied(false), 2000);
+                        }}
+                        className="shrink-0 p-1.5 hover:bg-stone-200 rounded-lg transition-colors"
+                        title="Copy RSS URL"
+                      >
+                        {rssCopied
+                          ? <CheckCircle2 size={14} className="text-green-600" />
+                          : <Upload size={14} className="text-stone-500" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Step-by-step instructions */}
+                  <ol className="space-y-2 text-sm text-stone-600">
+                    <li className="flex gap-3">
+                      <span className="w-5 h-5 bg-green-100 text-green-800 rounded-full text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
+                      <span>Go to <a href="https://podcasters.spotify.com" target="_blank" rel="noopener noreferrer" className="text-green-700 font-semibold underline underline-offset-2">podcasters.spotify.com</a> and sign in.</span>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="w-5 h-5 bg-green-100 text-green-800 rounded-full text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
+                      <span><strong>First time only:</strong> click <em>"Get started"</em> → <em>"I have a podcast"</em> → paste the RSS URL above.</span>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="w-5 h-5 bg-green-100 text-green-800 rounded-full text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
+                      <span><strong>Already set up?</strong> Spotify checks your feed automatically every 24 h — this new episode will appear without any action needed.</span>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="w-5 h-5 bg-green-100 text-green-800 rounded-full text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">4</span>
+                      <span>Once the episode appears, copy its Spotify link and paste it into the sermon record in your Admin → Sermons table to enable the "Listen on Spotify" button on the sermon page.</span>
+                    </li>
+                  </ol>
+                </div>
+              </div>
+
+              <button onClick={onClose}
+                className="w-full px-6 py-3 bg-stone-100 text-stone-900 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-stone-200 transition-colors">
+                Done
+              </button>
+            </div>
+          )}
+
         </div>
       </div>
     </div>

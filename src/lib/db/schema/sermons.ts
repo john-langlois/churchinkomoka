@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, date, boolean, timestamp, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, date, boolean, timestamp } from 'drizzle-orm/pg-core';
 
 // Main sermons table
 export const sermons = pgTable('sermons', {
@@ -6,9 +6,11 @@ export const sermons = pgTable('sermons', {
   title: varchar('title', { length: 255 }).notNull(),
   speaker: varchar('speaker', { length: 255 }),
   date: date('date'),
-  youtubeId: varchar('youtube_id', { length: 50 }),
-  spotifyLink: text('spotify_link'), // URL
-  articleContent: text('article_content'), // Markdown content as string
+  youtubeId: text('youtube_id'),
+  spotifyLink: text('spotify_link'),
+  articleContent: text('article_content'),
+  thumbnailUrl: text('thumbnail_url'),
+  audioUrl: text('audio_url'),
   isPublic: boolean('is_public').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

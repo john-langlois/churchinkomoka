@@ -7,6 +7,7 @@ import profiles from './routes/profiles';
 import retreat from './routes/retreat';
 import events from './routes/events';
 import sermons from './routes/sermons';
+import sermonProcess from './routes/sermonProcess';
 
 const app = new Hono()
   .basePath('/api')
@@ -18,10 +19,22 @@ const app = new Hono()
   .get('/', (c) => {
     return c.json({ status: 'ok', message: 'API is running' });
   })
+  // Podcast RSS feed — generated dynamically from DB
+  .get('/podcast', async (c) => {
+    try {
+      const { buildPodcastFeedXml } = await import('@/src/services/rssService');
+      const xml = await buildPodcastFeedXml();
+      return c.body(xml, 200, { 'Content-Type': 'application/rss+xml; charset=utf-8' });
+    } catch (err) {
+      console.error('Failed to generate podcast feed:', err);
+      return c.text('Podcast feed unavailable.', 503);
+    }
+  })
   .route('/profiles', profiles)
   .route('/retreat', retreat)
   .route('/events', events)
-  .route('/sermons', sermons);
+  .route('/sermons', sermons)
+  .route('/sermons', sermonProcess);
 
 export type AppType = typeof app;
 
