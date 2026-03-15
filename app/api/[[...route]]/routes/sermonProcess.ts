@@ -3,9 +3,8 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { streamSSE, type SSEStreamingApi } from 'hono/streaming';
 import { auth } from '@/auth';
-import { getVideoInfo, extractAudio, normaliseDate } from '@/src/services/youtubeService';
+import { getVideoInfo, normaliseDate } from '@/src/services/youtubeService';
 import { transcribeAndRewrite } from '@/src/services/geminiService';
-import { uploadAudio } from '@/src/services/blobService';
 import { createSermon } from '@/src/services/sermonService';
 import { regeneratePodcastFeed } from '@/src/services/rssService';
 
@@ -35,15 +34,18 @@ function sendStep(
 // ─── Schema definitions ────────────────────────────────────────────────────
 
 const processSchema = z.object({
-  youtubeUrl: z.string().url('Must be a valid YouTube URL'),
+  youtubeUrl: z.string().url('Must be a valid YouTube URL').optional().or(z.literal('')),
   preacherName: z.string().min(1, 'Preacher name is required'),
+  // audioUrl is the Vercel Blob URL returned after the client-side upload
+  audioUrl: z.string().url('Must be a valid audio URL'),
+  audioMimeType: z.string().default('audio/mp4'),
 });
 
 const confirmSchema = z.object({
   title: z.string().min(1),
   speaker: z.string(),
   date: z.string().nullable(),
-  youtubeUrl: z.string().url(),
+  youtubeUrl: z.string().optional(),
   audioUrl: z.string().url(),
   articleContent: z.string(),
 });
@@ -55,9 +57,8 @@ const sermonProcess = new Hono()
 
   /**
    * POST /api/sermons/process
-   * Phase 1: YouTube → audio → transcribe → thumbnail.
-   * Streams SSE progress and ends with a `review` event containing all
-   * generated content for the admin to approve/edit before publishing.
+   * Phase 1: Fetch YouTube metadata (if URL provided) → transcribe uploaded audio.
+   * Streams SSE progress; ends with a `review` event for admin approval.
    */
   .post(
     '/process',
@@ -66,48 +67,53 @@ const sermonProcess = new Hono()
       const isAdmin = await checkAdmin();
       if (!isAdmin) return c.json({ error: 'Unauthorized' }, 403);
 
-      const { youtubeUrl, preacherName } = c.req.valid('json');
+      const { youtubeUrl, preacherName, audioUrl, audioMimeType } = c.req.valid('json');
 
       return streamSSE(c, async (stream) => {
         try {
-          // ── Step 1: Fetch YouTube metadata ────────────────────────────
-          await sendStep(stream, 'metadata', 'Fetching video info from YouTube…');
-          const videoInfo = await getVideoInfo(youtubeUrl);
-          const sermonDate = normaliseDate(videoInfo.uploadDate);
-          await sendStep(stream, 'metadata', `Found: "${videoInfo.title}"`, {
-            title: videoInfo.title,
-            date: sermonDate,
-          });
+          let title = '';
+          let sermonDate = '';
 
-          // ── Step 2: Extract audio ─────────────────────────────────────
-          await sendStep(stream, 'audio', 'Extracting audio from YouTube video…');
-          const { buffer: audioBuffer, filename: audioFilename, mimeType } = await extractAudio(
-            youtubeUrl,
-            videoInfo.id ?? youtubeUrl
-          );
-          await sendStep(stream, 'audio', 'Audio extraction complete.');
+          // ── Step 1 (optional): Fetch YouTube metadata ─────────────────
+          if (youtubeUrl) {
+            await sendStep(stream, 'metadata', 'Fetching video info from YouTube…');
+            const videoInfo = await getVideoInfo(youtubeUrl);
+            title = videoInfo.title;
+            sermonDate = normaliseDate(videoInfo.uploadDate);
+            await sendStep(stream, 'metadata', `Found: "${videoInfo.title}"`, {
+              title: videoInfo.title,
+              date: sermonDate,
+            });
+          } else {
+            await sendStep(stream, 'metadata', 'No YouTube URL — skipping metadata fetch.');
+          }
 
-          // ── Step 3: Upload audio ──────────────────────────────────────
-          await sendStep(stream, 'upload_audio', 'Uploading audio to storage…');
-          const audioUrl = await uploadAudio(audioBuffer, audioFilename, mimeType);
-          await sendStep(stream, 'upload_audio', 'Audio uploaded.', { audioUrl });
+          // ── Step 2: Download audio from Blob for Gemini ───────────────
+          await sendStep(stream, 'audio', 'Fetching uploaded audio…');
+          const audioResponse = await fetch(audioUrl);
+          if (!audioResponse.ok) throw new Error('Failed to fetch uploaded audio from storage.');
+          const arrayBuffer = await audioResponse.arrayBuffer();
+          const audioBuffer = Buffer.from(arrayBuffer);
+          const audioFilename = audioUrl.split('/').pop() ?? 'sermon.mp4';
+          await sendStep(stream, 'audio', 'Audio ready.');
 
-          // ── Step 4: Transcribe + rewrite ──────────────────────────────
+          // ── Step 3: Transcribe + rewrite ──────────────────────────────
           await sendStep(stream, 'transcribe', 'Transcribing and rewriting with Gemini…');
+          const sermonTitle = title || 'Sermon';
           const { articleContent, podcastDescription } = await transcribeAndRewrite(
             audioBuffer,
             audioFilename,
-            videoInfo.title,
-            mimeType,
+            sermonTitle,
+            audioMimeType,
           );
           await sendStep(stream, 'transcribe', 'Transcription complete.');
 
           // ── Pause for review ──────────────────────────────────────────
           await sendStep(stream, 'review', 'Ready for your review.', {
-            title: videoInfo.title,
+            title: sermonTitle,
             speaker: preacherName,
             date: sermonDate || null,
-            youtubeUrl,
+            youtubeUrl: youtubeUrl || null,
             audioUrl,
             articleContent,
             podcastDescription,
@@ -124,7 +130,6 @@ const sermonProcess = new Hono()
   /**
    * POST /api/sermons/confirm
    * Phase 2: Save the (possibly edited) content to the DB and regenerate RSS.
-   * Called after the admin has reviewed/edited the transcript and thumbnail.
    */
   .post(
     '/confirm',
@@ -139,7 +144,7 @@ const sermonProcess = new Hono()
         title: body.title,
         speaker: body.speaker,
         date: body.date,
-        youtubeId: body.youtubeUrl,
+        youtubeId: body.youtubeUrl ?? null,
         spotifyLink: null,
         articleContent: body.articleContent,
         thumbnailUrl: LOGO_PATH,

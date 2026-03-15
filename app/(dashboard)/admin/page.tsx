@@ -1789,9 +1789,8 @@ function ProfileFormModal({ profile, onClose, onSave }: { profile: Profile | nul
 
 // Pipeline step definitions for UI
 const PIPELINE_STEPS = [
-  { id: 'metadata', label: 'Fetch video info', icon: Youtube },
-  { id: 'audio', label: 'Extract audio', icon: Music },
-  { id: 'upload_audio', label: 'Upload audio', icon: Upload },
+  { id: 'metadata', label: 'Fetch video info (optional)', icon: Youtube },
+  { id: 'audio', label: 'Prepare audio', icon: Music },
   { id: 'transcribe', label: 'Transcribe & rewrite', icon: FileText },
   { id: 'save', label: 'Save to database', icon: Radio },
   { id: 'rss', label: 'Update podcast feed', icon: Rss },
@@ -1826,10 +1825,19 @@ function SermonPipelineModal({ onClose }: { onClose: () => void }) {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [preacherName, setPreacherName] = useState('');
 
+  // ── Audio file upload state ────────────────────────────────────────────
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [uploadedAudioUrl, setUploadedAudioUrl] = useState<string | null>(null);
+  const [uploadedAudioMime, setUploadedAudioMime] = useState<string>('audio/mp4');
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+
   // ── Phase + progress state ─────────────────────────────────────────────
   const [phase, setPhase] = useState<ModalPhase>('form');
   const [stepStatuses, setStepStatuses] = useState<Record<StepId, StepStatus>>({
-    metadata: 'pending', audio: 'pending', upload_audio: 'pending',
+    metadata: 'pending', audio: 'pending',
     transcribe: 'pending', save: 'pending', rss: 'pending',
   });
   const [stepMessages, setStepMessages] = useState<Record<string, string>>({});
@@ -1866,19 +1874,53 @@ function SermonPipelineModal({ onClose }: { onClose: () => void }) {
     setErrorMessage(null);
     setReviewData(null);
     setStepStatuses({
-      metadata: 'pending', audio: 'pending', upload_audio: 'pending',
+      metadata: 'pending', audio: 'pending',
       transcribe: 'pending', save: 'pending', rss: 'pending',
     });
     setStepMessages({});
   };
 
+  // ── Audio file selection & upload ──────────────────────────────────────
+  const handleFileSelect = async (file: File) => {
+    setAudioFile(file);
+    setUploadedAudioUrl(null);
+    setUploadError(null);
+    setUploadProgress(0);
+    setUploading(true);
+
+    try {
+      const { upload } = await import('@vercel/blob/client');
+      const blob = await upload(`sermons/audio/${Date.now()}-${file.name}`, file, {
+        access: 'public',
+        handleUploadUrl: '/api/upload-audio',
+        onUploadProgress: ({ percentage }) => setUploadProgress(Math.round(percentage)),
+      });
+      setUploadedAudioUrl(blob.url);
+      setUploadedAudioMime(file.type || 'audio/mp4');
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
+      setAudioFile(null);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleFileDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileSelect(file);
+  };
+
   // ── Phase 1: Run pipeline ──────────────────────────────────────────────
   const handleRun = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!uploadedAudioUrl) return;
+
     setPhase('running');
     setErrorMessage(null);
     setStepStatuses({
-      metadata: 'running', audio: 'pending', upload_audio: 'pending',
+      metadata: youtubeUrl ? 'running' : 'done', audio: 'pending',
       transcribe: 'pending', save: 'pending', rss: 'pending',
     });
 
@@ -1886,7 +1928,12 @@ function SermonPipelineModal({ onClose }: { onClose: () => void }) {
       const response = await fetch('/api/sermons/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ youtubeUrl, preacherName }),
+        body: JSON.stringify({
+          youtubeUrl: youtubeUrl || undefined,
+          preacherName,
+          audioUrl: uploadedAudioUrl,
+          audioMimeType: uploadedAudioMime,
+        }),
       });
 
       if (!response.ok || !response.body) {
@@ -1940,6 +1987,7 @@ function SermonPipelineModal({ onClose }: { onClose: () => void }) {
             if (nextStep && nextStep !== 'save' && nextStep !== 'rss') {
               updateStep(nextStep, 'running');
             }
+            // upload_audio step is handled client-side; skip it in SSE
           } catch { /* ignore malformed lines */ }
         }
       }
@@ -1997,14 +2045,14 @@ function SermonPipelineModal({ onClose }: { onClose: () => void }) {
           <div className="flex justify-between items-start mb-6">
             <div>
               <h2 className="text-3xl font-black tracking-tight text-stone-900">
-                {phase === 'review' || phase === 'confirming' ? 'Review & Approve' : 'Process from YouTube'}
+                {phase === 'review' || phase === 'confirming' ? 'Review & Approve' : 'Add Sermon'}
               </h2>
               <p className="text-stone-500 text-sm mt-1">
                 {phase === 'review'
-                  ? 'Edit the transcript and thumbnail before publishing'
+                  ? 'Edit the transcript before publishing'
                   : phase === 'complete'
                   ? 'Sermon published successfully'
-                  : 'Transcribe, generate thumbnail, and publish to podcast'}
+                  : 'Upload audio, transcribe with Gemini, and publish to podcast'}
               </p>
             </div>
             <button
@@ -2025,21 +2073,113 @@ function SermonPipelineModal({ onClose }: { onClose: () => void }) {
                   <p className="text-sm">{errorMessage}</p>
                 </div>
               )}
+
+              {/* Audio file upload */}
               <div>
-                <label className="block text-sm font-bold uppercase tracking-widest text-stone-400 mb-2">YouTube URL</label>
-                <input type="url" required placeholder="https://youtube.com/watch?v=..."
-                  value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)}
-                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none" />
+                <label className="block text-sm font-bold uppercase tracking-widest text-stone-400 mb-2">
+                  Audio File <span className="text-red-500">*</span>
+                </label>
+
+                {/* Drop zone */}
+                {!audioFile && !uploading && (
+                  <div
+                    onDrop={handleFileDrop}
+                    onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                    onDragLeave={() => setDragOver(false)}
+                    onClick={() => document.getElementById('audio-file-input')?.click()}
+                    className={`relative flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
+                      dragOver
+                        ? 'border-stone-900 bg-stone-50'
+                        : 'border-stone-200 hover:border-stone-400 hover:bg-stone-50'
+                    }`}
+                  >
+                    <Music size={28} className="text-stone-300" />
+                    <div className="text-center">
+                      <p className="font-semibold text-stone-700 text-sm">Drop audio file here or click to browse</p>
+                      <p className="text-xs text-stone-400 mt-1">MP3, M4A, MP4, WAV, OGG, FLAC — up to 500 MB</p>
+                    </div>
+                    <input
+                      id="audio-file-input"
+                      type="file"
+                      accept="audio/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleFileSelect(file);
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* Upload progress */}
+                {uploading && (
+                  <div className="p-4 bg-stone-50 border border-stone-200 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-stone-600 truncate max-w-[60%]">{audioFile?.name}</span>
+                      <span className="text-stone-500 font-mono">{uploadProgress}%</span>
+                    </div>
+                    <div className="h-2 bg-stone-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-stone-900 rounded-full transition-all duration-200"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Upload complete */}
+                {uploadedAudioUrl && !uploading && (
+                  <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
+                    <CheckCircle2 size={18} className="text-green-600 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-green-900 truncate">{audioFile?.name}</p>
+                      <p className="text-xs text-green-700">Uploaded successfully</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setAudioFile(null); setUploadedAudioUrl(null); setUploadProgress(0); }}
+                      className="p-1 hover:bg-green-200 rounded-lg transition-colors"
+                    >
+                      <X size={14} className="text-green-700" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Upload error */}
+                {uploadError && (
+                  <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-xl mt-2">
+                    <AlertCircle size={16} className="text-red-500 shrink-0 mt-0.5" />
+                    <p className="text-sm text-red-700">{uploadError}</p>
+                  </div>
+                )}
               </div>
+
+              {/* Preacher name */}
               <div>
-                <label className="block text-sm font-bold uppercase tracking-widest text-stone-400 mb-2">Preacher Name</label>
+                <label className="block text-sm font-bold uppercase tracking-widest text-stone-400 mb-2">
+                  Preacher Name <span className="text-red-500">*</span>
+                </label>
                 <input type="text" required placeholder="e.g. Pastor John Smith"
                   value={preacherName} onChange={(e) => setPreacherName(e.target.value)}
                   className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none" />
               </div>
-              <button type="submit"
-                className="w-full px-6 py-4 bg-red-600 text-white rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-red-700 transition-colors flex items-center justify-center gap-3">
-                <Youtube size={18} /> Run Pipeline
+
+              {/* YouTube URL (optional) */}
+              <div>
+                <label className="block text-sm font-bold uppercase tracking-widest text-stone-400 mb-2">
+                  YouTube URL <span className="text-stone-300 font-normal normal-case">(optional — used to auto-fill title &amp; date)</span>
+                </label>
+                <input type="url" placeholder="https://youtube.com/watch?v=..."
+                  value={youtubeUrl} onChange={(e) => setYoutubeUrl(e.target.value)}
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none" />
+              </div>
+
+              <button
+                type="submit"
+                disabled={!uploadedAudioUrl || uploading || !preacherName}
+                className="w-full px-6 py-4 bg-stone-900 text-white rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-stone-700 transition-colors flex items-center justify-center gap-3 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <FileText size={18} /> Transcribe & Process
               </button>
             </form>
           )}
