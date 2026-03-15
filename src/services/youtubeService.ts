@@ -1,10 +1,31 @@
 import { YtDlp } from 'ytdlp-nodejs';
-import { PassThrough } from 'node:stream';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { execSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 
-const ytdlp = new YtDlp();
+// yt-dlp binary is not bundled — download it on first use into /tmp,
+// which is writable on both local systems and Vercel Lambda.
+const YTDLP_BIN = '/tmp/yt-dlp';
+const YTDLP_URL =
+  'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
+
+async function ensureYtDlp(): Promise<string> {
+  if (!existsSync(YTDLP_BIN)) {
+    console.log('[youtubeService] Downloading yt-dlp binary…');
+    execSync(`curl -fsSL "${YTDLP_URL}" -o "${YTDLP_BIN}"`, { stdio: 'pipe' });
+    execSync(`chmod +x "${YTDLP_BIN}"`);
+    console.log('[youtubeService] yt-dlp binary ready.');
+  }
+  return YTDLP_BIN;
+}
+
+function makeYtDlp(binaryPath: string) {
+  const instance = new YtDlp();
+  instance.setBinaryPath(binaryPath);
+  return instance;
+}
 
 export interface YouTubeVideoInfo {
   id: string;
@@ -29,7 +50,6 @@ export function extractYouTubeId(urlOrId: string): string {
     const url = new URL(urlOrId);
     const v = url.searchParams.get('v');
     if (v) return v;
-    // youtu.be/<id>
     const parts = url.pathname.split('/').filter(Boolean);
     return parts[parts.length - 1];
   } catch {
@@ -41,6 +61,8 @@ export function extractYouTubeId(urlOrId: string): string {
  * Fetch video metadata without downloading the video.
  */
 export async function getVideoInfo(youtubeUrl: string): Promise<YouTubeVideoInfo> {
+  const bin = await ensureYtDlp();
+  const ytdlp = makeYtDlp(bin);
   const info = await ytdlp.getInfoAsync<'video'>(youtubeUrl);
 
   return {
@@ -59,12 +81,14 @@ export async function getVideoInfo(youtubeUrl: string): Promise<YouTubeVideoInfo
  * Uses a temp file to avoid holding the full stream in memory at once.
  */
 export async function extractAudio(youtubeUrl: string, videoId: string): Promise<ExtractedAudio> {
+  const bin = await ensureYtDlp();
+  const ytdlp = makeYtDlp(bin);
+
   const tmpDir = os.tmpdir();
   const filename = `sermon_${videoId}_${Date.now()}.mp3`;
   const tmpPath = path.join(tmpDir, filename);
 
   try {
-    // Stream audio-only as MP3 to a temp file
     const writeStream = (await import('node:fs')).createWriteStream(tmpPath);
 
     await ytdlp
@@ -76,7 +100,6 @@ export async function extractAudio(youtubeUrl: string, videoId: string): Promise
     const buffer = await fs.readFile(tmpPath);
     return { buffer, filename };
   } finally {
-    // Clean up temp file regardless of outcome
     await fs.unlink(tmpPath).catch(() => undefined);
   }
 }
