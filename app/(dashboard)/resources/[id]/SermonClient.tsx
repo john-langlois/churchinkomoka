@@ -112,7 +112,12 @@ export default function SermonDetailPage({
               <span className="text-stone-900 line-clamp-1">{sermon.title}</span>
             </div>
             <h1 className="text-4xl md:text-6xl font-black tracking-tighter text-stone-900 mb-4 leading-tight">{sermon.title}</h1>
-            <p className="text-stone-500 mb-8 text-lg font-medium">{sermon.date} • {sermon.speaker}</p>
+            <p className="text-stone-500 mb-8 text-lg font-medium">
+              {sermon.date
+                ? new Date(sermon.date + 'T12:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+                : ''}
+              {sermon.date && sermon.speaker ? ' • ' : ''}{sermon.speaker}
+            </p>
             
             {/* Mobile: Show video and Spotify at top */}
             <div className="lg:hidden space-y-6 mb-8">

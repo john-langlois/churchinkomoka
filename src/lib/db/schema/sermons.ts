@@ -12,6 +12,7 @@ export const sermons = pgTable('sermons', {
   thumbnailUrl: text('thumbnail_url'),
   audioUrl: text('audio_url'),
   isPublic: boolean('is_public').default(true).notNull(),
+  inPodcastFeed: boolean('in_podcast_feed').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

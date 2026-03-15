@@ -1,20 +1,19 @@
 import { Feed } from 'feed';
-import { getPublicSermons } from './sermonService';
+import { getPodcastSermons } from './sermonService';
 import { uploadPodcastFeed } from './blobService';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://churchinkomoka.com';
-const PODCAST_TITLE = process.env.PODCAST_TITLE || 'Church in Komoka Sermons';
 const PODCAST_AUTHOR_EMAIL = process.env.PODCAST_AUTHOR_EMAIL || 'info@churchinkomoka.com';
 
+const PODCAST_TITLE = 'Church in Komoka';
 const DEFAULT_COVER_ART = `${APP_URL}/images/CHURCH IN KOMOKA.png`;
 
 /**
- * Build the podcast RSS XML string from all public sermons that have audio.
- * Called both by the `/api/podcast` route (on-demand) and by the pipeline
- * (to also push a copy to Vercel Blob for Spotify's direct-link option).
+ * Build the podcast RSS XML string from sermons marked as inPodcastFeed.
+ * Episode titles are formatted as "Sermon Title - Preacher Name".
  */
 export async function buildPodcastFeedXml(): Promise<string> {
-  const sermons = await getPublicSermons();
+  const sermons = await getPodcastSermons();
 
   const feed = new Feed({
     id: `${APP_URL}/podcast`,
@@ -42,9 +41,14 @@ export async function buildPodcastFeedXml(): Promise<string> {
   for (const sermon of sermons) {
     if (!sermon.audioUrl) continue;
 
-    const sermonDate = sermon.date ? new Date(sermon.date) : sermon.createdAt;
+    const sermonDate = sermon.date ? new Date(sermon.date + 'T12:00:00') : sermon.createdAt;
     const sermonLink = `${APP_URL}/resources/${sermon.id}`;
     const thumbnailUrl = sermon.thumbnailUrl || DEFAULT_COVER_ART;
+
+    // Episode title: "Sermon Title - Preacher Name"
+    const episodeTitle = sermon.speaker
+      ? `${sermon.title} - ${sermon.speaker}`
+      : sermon.title;
 
     const description = sermon.articleContent
       ? sermon.articleContent.slice(0, 300).replace(/[*#_`]/g, '') + '…'
@@ -53,7 +57,7 @@ export async function buildPodcastFeedXml(): Promise<string> {
     feed.addItem({
       id: sermon.id,
       guid: sermon.id,
-      title: sermon.title,
+      title: episodeTitle,
       link: sermonLink,
       date: sermonDate,
       published: sermonDate,
@@ -81,7 +85,6 @@ export async function buildPodcastFeedXml(): Promise<string> {
 
 /**
  * Regenerate the podcast RSS feed from the DB and push a copy to Vercel Blob.
- * Returns the Vercel Blob URL (useful as a direct link alternative).
  */
 export async function regeneratePodcastFeed(): Promise<string> {
   const xml = await buildPodcastFeedXml();

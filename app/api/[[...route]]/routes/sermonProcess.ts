@@ -144,6 +144,7 @@ const sermonProcess = new Hono()
         thumbnailUrl: LOGO_PATH,
         audioUrl: body.audioUrl,
         isPublic: true,
+        inPodcastFeed: true,
       });
 
       if (!result.success || !result.sermon) {

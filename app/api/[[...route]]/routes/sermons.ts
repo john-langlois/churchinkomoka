@@ -39,6 +39,7 @@ const createSermonSchema = z.object({
   ]).optional().nullable(),
   articleContent: z.string().optional().nullable(), // Markdown content as string
   isPublic: z.boolean().default(true),
+  inPodcastFeed: z.boolean().optional(),
 });
 
 const updateSermonSchema = createSermonSchema.partial();
@@ -125,6 +126,7 @@ const sermons = new Hono()
       if (data.spotifyLink !== undefined) updateData.spotifyLink = data.spotifyLink || null;
       if (data.articleContent !== undefined) updateData.articleContent = data.articleContent || null as any; // Markdown string stored in jsonb
       if (data.isPublic !== undefined) updateData.isPublic = data.isPublic;
+      if (data.inPodcastFeed !== undefined) updateData.inPodcastFeed = data.inPodcastFeed;
 
       const result = await updateSermon(id, updateData);
 

@@ -62,6 +62,7 @@ type Sermon = {
     takeaways: string[];
   };
   isPublic: boolean;
+  inPodcastFeed: boolean;
 };
 
 type PricingTier = {
@@ -168,7 +169,7 @@ export default function AdminPage() {
           if (!a.date && !b.date) return 0;
           if (!a.date) return 1;
           if (!b.date) return -1;
-          return new Date(b.date).getTime() - new Date(a.date).getTime();
+          return new Date(b.date + 'T12:00:00').getTime() - new Date(a.date + 'T12:00:00').getTime();
         });
         setSermons(sortedSermons);
       } else if (activeTab === 'retreats') {
@@ -258,6 +259,19 @@ export default function AdminPage() {
         }
       }
     );
+  };
+
+  const handleTogglePodcastFeed = async (id: string, currentValue: boolean) => {
+    try {
+      const res = await fetch(`/api/sermons/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ inPodcastFeed: !currentValue }),
+      });
+      if (res.ok) fetchData();
+    } catch (error) {
+      console.error('Error toggling podcast feed:', error);
+    }
   };
 
   const handleSaveEvent = async (eventData: Partial<Event>) => {
@@ -607,6 +621,7 @@ export default function AdminPage() {
                         <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-widest text-stone-400">YouTube</th>
                         <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-widest text-stone-400">Spotify</th>
                         <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-widest text-stone-400">Public</th>
+                        <th className="px-6 py-4 text-left text-xs font-bold uppercase tracking-widest text-stone-400">Podcast</th>
                         <th className="px-6 py-4 text-right text-xs font-bold uppercase tracking-widest text-stone-400">Actions</th>
                       </tr>
                     </thead>
@@ -660,6 +675,29 @@ export default function AdminPage() {
                                 }`}
                               />
                             </button>
+                          </td>
+                          <td className="px-6 py-4">
+                            {sermon.inPodcastFeed ? (
+                              <button
+                                onClick={() => handleTogglePodcastFeed(sermon.id, true)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-50 border border-green-200 text-green-700 text-xs font-bold hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-colors group"
+                                title="Click to remove from podcast feed"
+                              >
+                                <Rss size={12} className="group-hover:hidden" />
+                                <X size={12} className="hidden group-hover:block" />
+                                <span className="group-hover:hidden">In Feed</span>
+                                <span className="hidden group-hover:inline">Remove</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleTogglePodcastFeed(sermon.id, false)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-stone-50 border border-stone-200 text-stone-500 text-xs font-bold hover:bg-green-50 hover:border-green-200 hover:text-green-700 transition-colors"
+                                title="Click to add to podcast feed"
+                              >
+                                <Rss size={12} />
+                                Add to Feed
+                              </button>
+                            )}
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex gap-2 justify-end">

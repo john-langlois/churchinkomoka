@@ -1,6 +1,6 @@
 import { db } from '@/src/lib/db/connection';
 import { sermons } from '@/src/lib/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 import type { Sermon, NewSermon } from '@/src/lib/db/schema/sermons';
 
 /**
@@ -34,6 +34,22 @@ export async function getPublicSermons(): Promise<Sermon[]> {
     return publicSermons;
   } catch (error) {
     console.error('Error in getPublicSermons:', error);
+    return [];
+  }
+}
+
+/**
+ * Get sermons included in the podcast RSS feed
+ */
+export async function getPodcastSermons(): Promise<Sermon[]> {
+  try {
+    return await db
+      .select()
+      .from(sermons)
+      .where(and(eq(sermons.isPublic, true), eq(sermons.inPodcastFeed, true)))
+      .orderBy(desc(sermons.date));
+  } catch (error) {
+    console.error('Error in getPodcastSermons:', error);
     return [];
   }
 }
