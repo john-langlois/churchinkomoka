@@ -40,16 +40,17 @@ export interface TranscriptionResult {
 async function uploadAudioToGemini(
   audioBuffer: Buffer,
   filename: string,
+  mimeType = 'audio/mp4',
 ): Promise<string> {
   const arrayBuffer = audioBuffer.buffer.slice(
     audioBuffer.byteOffset,
     audioBuffer.byteOffset + audioBuffer.byteLength,
   ) as ArrayBuffer;
-  const blob = new Blob([arrayBuffer], { type: "audio/mpeg" });
+  const blob = new Blob([arrayBuffer], { type: mimeType });
   const file = await ai.files.upload({
     file: blob,
     config: {
-      mimeType: "audio/mpeg",
+      mimeType,
       displayName: filename,
     },
   });
@@ -64,9 +65,10 @@ export async function transcribeAndRewrite(
   audioBuffer: Buffer,
   filename: string,
   sermonTitle: string,
+  mimeType = 'audio/mp4',
 ): Promise<TranscriptionResult> {
   // Upload audio to Files API for reliable handling of large files
-  const audioUri = await uploadAudioToGemini(audioBuffer, filename);
+  const audioUri = await uploadAudioToGemini(audioBuffer, filename, mimeType);
 
   // Step 1: Transcribe + rewrite to article
   const transcriptionResponse = await ai.models.generateContent({
@@ -77,7 +79,7 @@ export async function transcribeAndRewrite(
         parts: [
           {
             fileData: {
-              mimeType: "audio/mpeg",
+              mimeType,
               fileUri: audioUri,
             },
           },

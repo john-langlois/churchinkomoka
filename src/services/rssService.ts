@@ -6,6 +6,14 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://churchinkomoka.com';
 const PODCAST_AUTHOR_EMAIL = process.env.PODCAST_AUTHOR_EMAIL || 'info@churchinkomoka.com';
 
 const PODCAST_TITLE = 'Church in Komoka';
+
+function guessAudioMime(url: string): string {
+  if (url.endsWith('.mp3')) return 'audio/mpeg';
+  if (url.endsWith('.webm')) return 'audio/webm';
+  if (url.endsWith('.ogg')) return 'audio/ogg';
+  // mp4, m4a, or anything else → audio/mp4
+  return 'audio/mp4';
+}
 const DEFAULT_COVER_ART = `${APP_URL}/images/CHURCH IN KOMOKA.png`;
 
 /**
@@ -71,11 +79,11 @@ export async function buildPodcastFeedXml(): Promise<string> {
       image: thumbnailUrl,
       audio: {
         url: sermon.audioUrl,
-        type: 'audio/mpeg',
+        type: guessAudioMime(sermon.audioUrl),
       },
       enclosure: {
         url: sermon.audioUrl,
-        type: 'audio/mpeg',
+        type: guessAudioMime(sermon.audioUrl),
       },
     });
   }

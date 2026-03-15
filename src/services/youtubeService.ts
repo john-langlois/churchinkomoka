@@ -1,35 +1,15 @@
-import { YtDlp } from 'ytdlp-nodejs';
+import ytdl from '@distube/ytdl-core';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { execSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-
-// yt-dlp binary is not bundled — download it on first use into /tmp,
-// which is writable on both local systems and Vercel Lambda.
-const YTDLP_BIN = '/tmp/yt-dlp';
-const YTDLP_URL =
-  'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
-
-async function ensureYtDlp(): Promise<string> {
-  if (!existsSync(YTDLP_BIN)) {
-    console.log('[youtubeService] Downloading yt-dlp binary…');
-    execSync(`curl -fsSL "${YTDLP_URL}" -o "${YTDLP_BIN}"`, { stdio: 'pipe' });
-    execSync(`chmod +x "${YTDLP_BIN}"`);
-    console.log('[youtubeService] yt-dlp binary ready.');
-  }
-  return YTDLP_BIN;
-}
-
-function makeYtDlp(binaryPath: string) {
-  return new YtDlp({ binaryPath });
-}
+import { createWriteStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
 
 export interface YouTubeVideoInfo {
   id: string;
   title: string;
   description: string;
-  uploadDate: string; // YYYYMMDD from yt-dlp
+  uploadDate: string; // normalised to YYYY-MM-DD
   uploader: string;
   durationSeconds: number;
   thumbnailUrl: string;
@@ -38,10 +18,11 @@ export interface YouTubeVideoInfo {
 export interface ExtractedAudio {
   buffer: Buffer;
   filename: string;
+  mimeType: string;
 }
 
 /**
- * Extract the YouTube video ID from a URL or return the ID if already bare.
+ * Extract the YouTube video ID from a full URL or bare ID string.
  */
 export function extractYouTubeId(urlOrId: string): string {
   try {
@@ -56,56 +37,78 @@ export function extractYouTubeId(urlOrId: string): string {
 }
 
 /**
- * Fetch video metadata without downloading the video.
+ * Fetch video metadata without downloading media.
  */
 export async function getVideoInfo(youtubeUrl: string): Promise<YouTubeVideoInfo> {
-  const bin = await ensureYtDlp();
-  const ytdlp = makeYtDlp(bin);
-  const info = await ytdlp.getInfoAsync<'video'>(youtubeUrl);
+  const info = await ytdl.getInfo(youtubeUrl);
+  const d = info.videoDetails;
 
   return {
-    id: info.id,
-    title: info.title,
-    description: info.description ?? '',
-    uploadDate: info.upload_date ?? '',
-    uploader: info.uploader ?? '',
-    durationSeconds: info.duration ?? 0,
-    thumbnailUrl: info.thumbnail ?? '',
+    id: d.videoId,
+    title: d.title,
+    description: d.description ?? '',
+    uploadDate: normaliseDate(d.uploadDate ?? d.publishDate ?? ''),
+    uploader: d.author?.name ?? '',
+    durationSeconds: parseInt(d.lengthSeconds ?? '0', 10),
+    thumbnailUrl: d.thumbnails?.[d.thumbnails.length - 1]?.url ?? '',
   };
 }
 
 /**
- * Download audio-only stream from a YouTube video and return as a Buffer.
- * Uses a temp file to avoid holding the full stream in memory at once.
+ * Download the audio track of a YouTube video and return it as a Buffer.
+ * Prefers MP4/AAC (natively supported by Spotify & Gemini); falls back to
+ * whatever best-quality audio format is available.
  */
 export async function extractAudio(youtubeUrl: string, videoId: string): Promise<ExtractedAudio> {
-  const bin = await ensureYtDlp();
-  const ytdlp = makeYtDlp(bin);
+  const info = await ytdl.getInfo(youtubeUrl);
 
-  const tmpDir = os.tmpdir();
-  const filename = `sermon_${videoId}_${Date.now()}.mp3`;
-  const tmpPath = path.join(tmpDir, filename);
+  // Prefer mp4 audio (aac) for widest compatibility
+  const mp4Format = ytdl.chooseFormat(info.formats, {
+    filter: (f) => !!f.hasAudio && !f.hasVideo && f.container === 'mp4',
+    quality: 'highestaudio',
+  });
+
+  const chosenFormat = mp4Format ?? ytdl.chooseFormat(info.formats, {
+    filter: 'audioonly',
+    quality: 'highestaudio',
+  });
+
+  const ext = chosenFormat?.container === 'mp4' ? 'mp4' : 'webm';
+  const mimeType = ext === 'mp4' ? 'audio/mp4' : 'audio/webm';
+  const filename = `sermon_${videoId}_${Date.now()}.${ext}`;
+  const tmpPath = path.join(os.tmpdir(), filename);
 
   try {
-    const writeStream = (await import('node:fs')).createWriteStream(tmpPath);
-
-    await ytdlp
-      .stream(youtubeUrl)
-      .filter('audioonly')
-      .type('mp3')
-      .pipe(writeStream);
-
+    const audioStream = ytdl.downloadFromInfo(info, { format: chosenFormat });
+    await pipeline(audioStream, createWriteStream(tmpPath));
     const buffer = await fs.readFile(tmpPath);
-    return { buffer, filename };
+    return { buffer, filename, mimeType };
   } finally {
     await fs.unlink(tmpPath).catch(() => undefined);
   }
 }
 
 /**
- * Convert a yt-dlp upload_date string (YYYYMMDD) to an ISO date (YYYY-MM-DD).
+ * Normalise various date string formats to YYYY-MM-DD.
+ * - ytdl-core may return "January 15, 2024", "2024-01-15", or "20240115"
  */
+export function normaliseDate(raw: string): string {
+  if (!raw) return '';
+  // Already ISO date
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  // yt-dlp style YYYYMMDD
+  if (/^\d{8}$/.test(raw)) {
+    return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+  }
+  // Human-readable: try JS Date parser
+  const d = new Date(raw);
+  if (!isNaN(d.getTime())) {
+    return d.toISOString().split('T')[0];
+  }
+  return '';
+}
+
+/** @deprecated use normaliseDate */
 export function formatUploadDate(uploadDate: string): string {
-  if (!uploadDate || uploadDate.length !== 8) return '';
-  return `${uploadDate.slice(0, 4)}-${uploadDate.slice(4, 6)}-${uploadDate.slice(6, 8)}`;
+  return normaliseDate(uploadDate);
 }

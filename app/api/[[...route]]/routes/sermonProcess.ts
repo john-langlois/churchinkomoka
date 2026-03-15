@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { streamSSE, type SSEStreamingApi } from 'hono/streaming';
 import { auth } from '@/auth';
-import { getVideoInfo, extractAudio, formatUploadDate } from '@/src/services/youtubeService';
+import { getVideoInfo, extractAudio, normaliseDate } from '@/src/services/youtubeService';
 import { transcribeAndRewrite } from '@/src/services/geminiService';
 import { uploadAudio } from '@/src/services/blobService';
 import { createSermon } from '@/src/services/sermonService';
@@ -73,7 +73,7 @@ const sermonProcess = new Hono()
           // ── Step 1: Fetch YouTube metadata ────────────────────────────
           await sendStep(stream, 'metadata', 'Fetching video info from YouTube…');
           const videoInfo = await getVideoInfo(youtubeUrl);
-          const sermonDate = formatUploadDate(videoInfo.uploadDate);
+          const sermonDate = normaliseDate(videoInfo.uploadDate);
           await sendStep(stream, 'metadata', `Found: "${videoInfo.title}"`, {
             title: videoInfo.title,
             date: sermonDate,
@@ -81,7 +81,7 @@ const sermonProcess = new Hono()
 
           // ── Step 2: Extract audio ─────────────────────────────────────
           await sendStep(stream, 'audio', 'Extracting audio from YouTube video…');
-          const { buffer: audioBuffer, filename: audioFilename } = await extractAudio(
+          const { buffer: audioBuffer, filename: audioFilename, mimeType } = await extractAudio(
             youtubeUrl,
             videoInfo.id ?? youtubeUrl
           );
@@ -89,7 +89,7 @@ const sermonProcess = new Hono()
 
           // ── Step 3: Upload audio ──────────────────────────────────────
           await sendStep(stream, 'upload_audio', 'Uploading audio to storage…');
-          const audioUrl = await uploadAudio(audioBuffer, audioFilename);
+          const audioUrl = await uploadAudio(audioBuffer, audioFilename, mimeType);
           await sendStep(stream, 'upload_audio', 'Audio uploaded.', { audioUrl });
 
           // ── Step 4: Transcribe + rewrite ──────────────────────────────
@@ -97,7 +97,8 @@ const sermonProcess = new Hono()
           const { articleContent, podcastDescription } = await transcribeAndRewrite(
             audioBuffer,
             audioFilename,
-            videoInfo.title
+            videoInfo.title,
+            mimeType,
           );
           await sendStep(stream, 'transcribe', 'Transcription complete.');
 

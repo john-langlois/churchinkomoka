@@ -11,11 +11,12 @@ export interface UploadedAssets {
  */
 export async function uploadAudio(
   audioBuffer: Buffer,
-  filename: string
+  filename: string,
+  mimeType = 'audio/mp4',
 ): Promise<string> {
   const blob = await put(`sermons/audio/${filename}`, audioBuffer, {
     access: 'public',
-    contentType: 'audio/mpeg',
+    contentType: mimeType,
   });
   return blob.url;
 }
