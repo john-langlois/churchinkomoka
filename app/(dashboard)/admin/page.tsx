@@ -1847,6 +1847,7 @@ function SermonPipelineModal({ onClose }: { onClose: () => void }) {
   const [reviewData, setReviewData] = useState<ReviewData | null>(null);
   const [editedContent, setEditedContent] = useState('');
   const [editedTitle, setEditedTitle] = useState('');
+  const [reviewTab, setReviewTab] = useState<'write' | 'preview' | 'split'>('split');
 
   // ── Complete state ─────────────────────────────────────────────────────
   const [publishedSermonId, setPublishedSermonId] = useState('');
@@ -2038,7 +2039,7 @@ function SermonPipelineModal({ onClose }: { onClose: () => void }) {
   // ── Render ─────────────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/80 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[94vh] overflow-y-auto">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[94vh] overflow-y-auto">
         <div className="p-8">
 
           {/* Header */}
@@ -2228,19 +2229,56 @@ function SermonPipelineModal({ onClose }: { onClose: () => void }) {
                 />
               </div>
 
-              {/* Transcript */}
+              {/* Transcript — split editor/preview */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-sm font-bold uppercase tracking-widest text-stone-400">Article / Transcript</label>
-                  <span className="text-xs text-stone-400">{editedContent.length} chars</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-stone-400 mr-2">{editedContent.length} chars</span>
+                    {(['write', 'split', 'preview'] as const).map((tab) => (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setReviewTab(tab)}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold capitalize transition-colors ${
+                          reviewTab === tab
+                            ? 'bg-stone-900 text-white'
+                            : 'bg-stone-100 text-stone-500 hover:bg-stone-200'
+                        }`}
+                      >
+                        {tab}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <textarea
-                  value={editedContent}
-                  onChange={(e) => setEditedContent(e.target.value)}
-                  rows={18}
-                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none resize-y font-mono text-sm leading-relaxed"
-                  placeholder="Sermon article content (Markdown)…"
-                />
+
+                <div className={`rounded-xl border border-stone-200 overflow-hidden ${reviewTab === 'split' ? 'grid grid-cols-2' : ''}`}>
+                  {(reviewTab === 'write' || reviewTab === 'split') && (
+                    <div className={reviewTab === 'split' ? 'border-r border-stone-200' : ''}>
+                      {reviewTab === 'split' && (
+                        <div className="px-4 py-2 bg-stone-50 border-b border-stone-200 text-xs font-bold text-stone-400 uppercase tracking-widest">Edit</div>
+                      )}
+                      <textarea
+                        value={editedContent}
+                        onChange={(e) => setEditedContent(e.target.value)}
+                        className="w-full px-4 py-4 bg-white focus:outline-none resize-none font-mono text-sm leading-relaxed"
+                        style={{ height: '420px' }}
+                        placeholder="Sermon article content (Markdown)…"
+                      />
+                    </div>
+                  )}
+
+                  {(reviewTab === 'preview' || reviewTab === 'split') && (
+                    <div>
+                      {reviewTab === 'split' && (
+                        <div className="px-4 py-2 bg-stone-50 border-b border-stone-200 text-xs font-bold text-stone-400 uppercase tracking-widest">Preview</div>
+                      )}
+                      <div className="px-5 py-4 overflow-y-auto font-sans text-sm text-stone-700 leading-relaxed" style={{ height: reviewTab === 'preview' ? '420px' : '420px' }}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{editedContent || '_Nothing to preview yet._'}</ReactMarkdown>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <p className="text-xs text-stone-400 mt-1">Markdown supported. This will appear on the sermon page.</p>
               </div>
 

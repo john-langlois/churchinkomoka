@@ -14,7 +14,7 @@ function guessAudioMime(url: string): string {
   // mp4, m4a, or anything else → audio/mp4
   return 'audio/mp4';
 }
-const DEFAULT_COVER_ART = `${APP_URL}/images/CHURCH IN KOMOKA.png`;
+const DEFAULT_COVER_ART = `${APP_URL}/images/CHURCH%20IN%20KOMOKA.png`;
 
 /**
  * Build the podcast RSS XML string from sermons marked as inPodcastFeed.

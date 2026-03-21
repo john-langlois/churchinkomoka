@@ -26,8 +26,9 @@ const app = new Hono()
       const xml = await buildPodcastFeedXml();
       return c.body(xml, 200, { 'Content-Type': 'application/rss+xml; charset=utf-8' });
     } catch (err) {
-      console.error('Failed to generate podcast feed:', err);
-      return c.text('Podcast feed unavailable.', 503);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('Failed to generate podcast feed:', msg);
+      return c.text(`Podcast feed unavailable: ${msg}`, 503);
     }
   })
   .route('/profiles', profiles)
