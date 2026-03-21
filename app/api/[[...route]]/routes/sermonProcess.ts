@@ -3,7 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { streamSSE, type SSEStreamingApi } from 'hono/streaming';
 import { auth } from '@/auth';
-import { getVideoInfo, normaliseDate } from '@/src/services/youtubeService';
+import { fetchYouTubeMeta } from '@/src/services/youtubeService';
 import { transcribeAndRewrite } from '@/src/services/geminiService';
 import { createSermon } from '@/src/services/sermonService';
 import { regeneratePodcastFeed } from '@/src/services/rssService';
@@ -34,9 +34,8 @@ function sendStep(
 // ─── Schema definitions ────────────────────────────────────────────────────
 
 const processSchema = z.object({
-  youtubeUrl: z.string().url('Must be a valid YouTube URL').optional().or(z.literal('')),
+  youtubeUrl: z.string().url().optional().or(z.literal('')),
   preacherName: z.string().min(1, 'Preacher name is required'),
-  // audioUrl is the Vercel Blob URL returned after the client-side upload
   audioUrl: z.string().url('Must be a valid audio URL'),
   audioMimeType: z.string().default('audio/mp4'),
 });
@@ -45,7 +44,7 @@ const confirmSchema = z.object({
   title: z.string().min(1),
   speaker: z.string(),
   date: z.string().nullable(),
-  youtubeUrl: z.string().optional(),
+  youtubeUrl: z.string().optional().nullable(),
   audioUrl: z.string().url(),
   articleContent: z.string(),
 });
@@ -57,8 +56,10 @@ const sermonProcess = new Hono()
 
   /**
    * POST /api/sermons/process
-   * Phase 1: Fetch YouTube metadata (if URL provided) → transcribe uploaded audio.
-   * Streams SSE progress; ends with a `review` event for admin approval.
+   * 1. Optionally fetches YouTube title via oEmbed (no library, no bot issues).
+   * 2. Downloads the already-uploaded audio from Vercel Blob.
+   * 3. Transcribes with Gemini.
+   * 4. Emits a `review` SSE event for the admin to approve/edit.
    */
   .post(
     '/process',
@@ -72,32 +73,29 @@ const sermonProcess = new Hono()
       return streamSSE(c, async (stream) => {
         try {
           let title = '';
-          let sermonDate = '';
 
-          // ── Step 1 (optional): Fetch YouTube metadata ─────────────────
+          // ── Step 1 (optional): fetch YouTube title via oEmbed ─────────
           if (youtubeUrl) {
-            await sendStep(stream, 'metadata', 'Fetching video info from YouTube…');
-            const videoInfo = await getVideoInfo(youtubeUrl);
-            title = videoInfo.title;
-            sermonDate = normaliseDate(videoInfo.uploadDate);
-            await sendStep(stream, 'metadata', `Found: "${videoInfo.title}"`, {
-              title: videoInfo.title,
-              date: sermonDate,
+            await sendStep(stream, 'metadata', 'Fetching video title from YouTube…');
+            const meta = await fetchYouTubeMeta(youtubeUrl);
+            title = meta?.title ?? '';
+            await sendStep(stream, 'metadata', title ? `Found: "${title}"` : 'Could not fetch title — you can enter it manually.', {
+              title,
             });
           } else {
-            await sendStep(stream, 'metadata', 'No YouTube URL — skipping metadata fetch.');
+            await sendStep(stream, 'metadata', 'No YouTube URL — skipping.');
           }
 
-          // ── Step 2: Download audio from Blob for Gemini ───────────────
+          // ── Step 2: fetch uploaded audio from Blob ────────────────────
           await sendStep(stream, 'audio', 'Fetching uploaded audio…');
           const audioResponse = await fetch(audioUrl);
-          if (!audioResponse.ok) throw new Error('Failed to fetch uploaded audio from storage.');
+          if (!audioResponse.ok) throw new Error('Failed to fetch audio from storage. Please re-upload and try again.');
           const arrayBuffer = await audioResponse.arrayBuffer();
           const audioBuffer = Buffer.from(arrayBuffer);
           const audioFilename = audioUrl.split('/').pop() ?? 'sermon.mp4';
           await sendStep(stream, 'audio', 'Audio ready.');
 
-          // ── Step 3: Transcribe + rewrite ──────────────────────────────
+          // ── Step 3: transcribe + rewrite with Gemini ──────────────────
           await sendStep(stream, 'transcribe', 'Transcribing and rewriting with Gemini…');
           const sermonTitle = title || 'Sermon';
           const { articleContent, podcastDescription } = await transcribeAndRewrite(
@@ -112,7 +110,7 @@ const sermonProcess = new Hono()
           await sendStep(stream, 'review', 'Ready for your review.', {
             title: sermonTitle,
             speaker: preacherName,
-            date: sermonDate || null,
+            date: null,
             youtubeUrl: youtubeUrl || null,
             audioUrl,
             articleContent,
@@ -129,7 +127,7 @@ const sermonProcess = new Hono()
 
   /**
    * POST /api/sermons/confirm
-   * Phase 2: Save the (possibly edited) content to the DB and regenerate RSS.
+   * Saves the reviewed sermon to the DB and regenerates the podcast RSS feed.
    */
   .post(
     '/confirm',
