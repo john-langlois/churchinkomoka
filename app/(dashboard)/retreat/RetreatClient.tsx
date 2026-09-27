@@ -22,7 +22,6 @@ import {
 } from "lucide-react";
 import BackgroundPlayer from "next-video/background-player";
 import { SectionHeader } from "@/src/components/SectionHeader";
-import { useSession } from "next-auth/react";
 import { Calendar } from "@/src/components/ui/calendar";
 import {
   Popover,
@@ -98,7 +97,6 @@ export default function RetreatPage() {
 }
 
 function RetreatPageContent() {
-  const { data: session } = useSession();
   const searchParams = useSearchParams();
 
   const [view, setView] = useState<View>("details");
@@ -295,32 +293,33 @@ function RetreatPageContent() {
   };
 
   const handleSubmit = async () => {
-    if (!selectedRetreatId || !session?.user) return;
+    if (loading) return;
+    if (!selectedRetreatId) {
+      setStepErrors("Please select a retreat before submitting.");
+      return;
+    }
 
+    setStepErrors(null);
     setLoading(true);
     try {
-      const profileId =
-        (session.user as any)?.id || (session.user as any)?.profileId;
-      if (!profileId) {
-        alert("Unable to find your profile. Please contact support.");
-        setLoading(false);
-        return;
-      }
-
       const registrants = attendees.map((attendee) => {
-        const nameParts = attendee.fullName.trim().split(" ");
+        const nameParts = attendee.fullName.trim().split(/\s+/);
         const firstName = nameParts[0] || "";
-        const lastName = nameParts.slice(1).join(" ") || "";
-        const age = parseInt(attendee.age);
+        const lastName = nameParts.slice(1).join(" ");
+        const age = parseInt(attendee.age, 10);
         return {
           firstName,
           lastName,
           age: isNaN(age) ? undefined : age,
-          isAdult: age >= 18,
+          isAdult: isNaN(age) ? true : age >= 18,
         };
       });
 
-      const notesParts = [];
+      const notesParts = [
+        `Church: ${formData.churchName}`,
+        `Pastor: ${formData.pastorName} (${formData.pastorContact})`,
+        `Location: ${formData.city}, ${formData.country}`,
+      ];
       if (formData.expectedArrivalDate)
         notesParts.push(
           `Expected Arrival: ${format(formData.expectedArrivalDate, "yyyy-MM-dd")}`,
@@ -330,7 +329,7 @@ function RetreatPageContent() {
           `Expected Departure: ${format(formData.expectedDepartureDate, "yyyy-MM-dd")}`,
         );
       if (formData.notes) notesParts.push(formData.notes);
-      const notes = notesParts.length > 0 ? notesParts.join("\n") : undefined;
+      const notes = notesParts.join("\n");
 
       const res = await fetch("/api/retreat", {
         method: "POST",
@@ -338,26 +337,29 @@ function RetreatPageContent() {
         body: JSON.stringify({
           retreatId: selectedRetreatId,
           type: attendees.length > 1 ? "family" : "individual",
-          profileId,
-          contactName: formData.fullName,
-          contactEmail: formData.email,
-          contactPhone: formData.phoneNumber,
+          contactName: formData.fullName.trim(),
+          contactEmail: formData.email.trim(),
+          contactPhone: formData.phoneNumber.trim(),
           notes,
           registrants,
         }),
       });
 
+      const data = await res.json().catch(() => null);
       if (res.ok) {
-        const data = await res.json();
-        setSubmittedRegistrationId(data.registration?.id ?? null);
+        setSubmittedRegistrationId(data?.registration?.id ?? null);
         setSubmitted(true);
       } else {
-        const error = await res.json();
-        alert(error.error || "Failed to submit registration");
+        setStepErrors(
+          (typeof data?.error === "string" && data.error) ||
+            "Failed to submit registration. Please try again.",
+        );
       }
     } catch (error) {
       console.error("Error submitting registration:", error);
-      alert("Failed to submit registration. Please try again.");
+      setStepErrors(
+        "Failed to submit registration. Please check your connection and try again.",
+      );
     } finally {
       setLoading(false);
     }

@@ -40,10 +40,10 @@ export const retreatRegistrations = pgTable('retreat_registrations', {
   id: uuid('id').defaultRandom().primaryKey(),
   retreatId: uuid('retreat_id').references(() => retreats.id), // Link to specific retreat
   type: registrationTypeEnum('type').notNull(), // 'individual' or 'family'
-  profileId: uuid('profile_id').references(() => profiles.id).notNull(), // Main registrant
+  profileId: uuid('profile_id').references(() => profiles.id), // Main registrant (null for guest registrations)
   contactName: varchar('contact_name', { length: 255 }).notNull(),
   contactEmail: varchar('contact_email', { length: 255 }).notNull(),
-  contactPhone: varchar('contact_phone', { length: 20 }),
+  contactPhone: varchar('contact_phone', { length: 50 }),
   status: registrationStatusEnum('status').default('pending').notNull(),
   notes: text('notes'), // Additional notes from the registration form
   createdAt: timestamp('created_at').defaultNow().notNull(),

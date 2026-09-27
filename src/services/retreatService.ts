@@ -212,7 +212,7 @@ export async function createRetreatRegistration(
   registrationData: {
     retreatId: string;
     type: 'individual' | 'family';
-    profileId: string;
+    profileId?: string | null;
     contactName: string;
     contactEmail: string;
     contactPhone?: string;
@@ -231,38 +231,42 @@ export async function createRetreatRegistration(
   }
 ): Promise<{ success: boolean; registration: RetreatRegistration | null; error?: string }> {
   try {
-    // Start transaction by creating registration first
-    const newRegistration: NewRetreatRegistration = {
-      retreatId: registrationData.retreatId,
-      type: registrationData.type,
-      profileId: registrationData.profileId,
-      contactName: registrationData.contactName,
-      contactEmail: registrationData.contactEmail,
-      contactPhone: registrationData.contactPhone || null,
-      notes: registrationData.notes || null,
-      status: 'pending',
-    };
+    // Insert the registration and its registrants atomically so a failure
+    // part-way through doesn't leave an orphaned registration behind.
+    const registration = await db.transaction(async (tx) => {
+      const newRegistration: NewRetreatRegistration = {
+        retreatId: registrationData.retreatId,
+        type: registrationData.type,
+        profileId: registrationData.profileId || null,
+        contactName: registrationData.contactName,
+        contactEmail: registrationData.contactEmail,
+        contactPhone: registrationData.contactPhone || null,
+        notes: registrationData.notes || null,
+        status: 'pending',
+      };
 
-    const [registration] = await db
-      .insert(retreatRegistrations)
-      .values(newRegistration)
-      .returning();
+      const [created] = await tx
+        .insert(retreatRegistrations)
+        .values(newRegistration)
+        .returning();
 
-    // Create registrants
-    const registrantsToInsert: NewRetreatRegistrant[] = registrationData.registrants.map(reg => ({
-      registrationId: registration.id,
-      profileId: reg.profileId || null,
-      firstName: reg.firstName,
-      lastName: reg.lastName,
-      age: reg.age || null,
-      isAdult: reg.isAdult,
-      dietaryRestrictions: reg.dietaryRestrictions || null,
-      medicalNotes: reg.medicalNotes || null,
-      emergencyContactName: reg.emergencyContactName || null,
-      emergencyContactPhone: reg.emergencyContactPhone || null,
-    }));
+      const registrantsToInsert: NewRetreatRegistrant[] = registrationData.registrants.map(reg => ({
+        registrationId: created.id,
+        profileId: reg.profileId || null,
+        firstName: reg.firstName,
+        lastName: reg.lastName,
+        age: reg.age ?? null,
+        isAdult: reg.isAdult,
+        dietaryRestrictions: reg.dietaryRestrictions || null,
+        medicalNotes: reg.medicalNotes || null,
+        emergencyContactName: reg.emergencyContactName || null,
+        emergencyContactPhone: reg.emergencyContactPhone || null,
+      }));
 
-    await db.insert(retreatRegistrants).values(registrantsToInsert);
+      await tx.insert(retreatRegistrants).values(registrantsToInsert);
+
+      return created;
+    });
 
     return { success: true, registration };
   } catch (error) {

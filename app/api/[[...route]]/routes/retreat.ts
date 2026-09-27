@@ -20,6 +20,8 @@ import {
 import {
   sendRetreatConfirmationEmail,
   sendAdminRetreatNotificationEmail,
+  sendAdminRetreatFailureEmail,
+  getRetreatNotificationEmailsFromEnv,
 } from "@/src/services/emailService";
 import { getAdminEmails } from "@/src/services/profileService";
 
@@ -33,11 +35,19 @@ async function checkAdminFromRequest(request: Request): Promise<boolean> {
   }
 }
 
+// Admin profile emails plus any configured fallback addresses, de-duplicated
+async function getRetreatAdminRecipients(): Promise<string[]> {
+  const adminEmails = await getAdminEmails();
+  const all = [...adminEmails, ...getRetreatNotificationEmailsFromEnv()];
+  return Array.from(new Set(all.map((e) => e.trim().toLowerCase())));
+}
+
 // Validation schemas
 const registrantSchema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
-  age: z.number().int().positive().optional(),
+  firstName: z.string().trim().min(1, "First name is required"),
+  // Single-word names are allowed, so last name may be empty
+  lastName: z.string().trim().default(""),
+  age: z.number().int().min(0).optional(),
   isAdult: z.boolean().default(true),
   dietaryRestrictions: z.string().optional(),
   medicalNotes: z.string().optional(),
@@ -49,10 +59,13 @@ const registrantSchema = z.object({
 const createRegistrationSchema = z.object({
   retreatId: z.string().uuid("Valid retreat ID is required"),
   type: z.enum(["individual", "family"]),
-  profileId: z.string().uuid(),
-  contactName: z.string().min(1, "Contact name is required"),
-  contactEmail: z.string().email("Valid email is required"),
-  contactPhone: z.string().optional(),
+  contactName: z.string().trim().min(1, "Contact name is required"),
+  contactEmail: z.string().trim().email("Valid email is required"),
+  contactPhone: z
+    .string()
+    .trim()
+    .max(50, "Phone number is too long")
+    .optional(),
   notes: z.string().optional(),
   registrants: z
     .array(registrantSchema)
@@ -238,61 +251,131 @@ const retreat = new Hono()
     return c.json({ message: "Retreat deleted successfully" });
   })
   // Registration routes
-  .post("/", zValidator("json", createRegistrationSchema), async (c) => {
-    const data = c.req.valid("json");
-
-    const result = await createRetreatRegistration({
-      retreatId: data.retreatId,
-      type: data.type,
-      profileId: data.profileId,
-      contactName: data.contactName,
-      contactEmail: data.contactEmail,
-      contactPhone: data.contactPhone,
-      notes: data.notes,
-      registrants: data.registrants,
-    });
-
-    if (!result.success) {
-      return c.json(
-        { error: result.error || "Failed to create registration" },
-        500,
-      );
-    }
-
-    const registration = result.registration!;
-    const retreat = await getRetreatById(data.retreatId);
-    const full = await getRetreatRegistrationById(registration.id);
-    if (retreat && full.registration && full.registrants.length > 0) {
-      const [, adminEmails] = await Promise.all([
-        sendRetreatConfirmationEmail(
-          data.contactEmail,
-          retreat,
-          full.registration,
-          full.registrants,
-        ),
-        getAdminEmails(),
-      ]);
-
-      if (adminEmails.length > 0) {
-        sendAdminRetreatNotificationEmail(
-          adminEmails,
-          retreat,
-          full.registration,
-          full.registrants,
-        ).catch((err) =>
-          console.error("Failed to send admin notification:", err),
+  .post(
+    "/",
+    zValidator("json", createRegistrationSchema, (result, c) => {
+      if (!result.success) {
+        const issue = result.error.issues[0];
+        return c.json(
+          { error: issue?.message || "Invalid registration details" },
+          400,
         );
       }
-    }
+    }),
+    async (c) => {
+      const data = c.req.valid("json");
 
-    return c.json(
-      {
-        registration,
-        message: "Registration created successfully",
-      },
-      201,
-    );
-  })
+      // Link to the signed-in member when there is one; guests register
+      // without a profile.
+      let profileId: string | null = null;
+      try {
+        const session = await auth();
+        profileId = ((session?.user as any)?.id as string | undefined) ?? null;
+      } catch {
+        profileId = null;
+      }
+
+      const result = await createRetreatRegistration({
+        retreatId: data.retreatId,
+        type: data.type,
+        profileId,
+        contactName: data.contactName,
+        contactEmail: data.contactEmail,
+        contactPhone: data.contactPhone,
+        notes: data.notes,
+        registrants: data.registrants,
+      });
+
+      if (!result.success) {
+        // Don't lose the submission: send the details to the admins so they
+        // can follow up manually.
+        try {
+          const [retreat, adminEmails] = await Promise.all([
+            getRetreatById(data.retreatId),
+            getRetreatAdminRecipients(),
+          ]);
+          const alert = await sendAdminRetreatFailureEmail(adminEmails, {
+            retreatName: retreat?.name,
+            contactName: data.contactName,
+            contactEmail: data.contactEmail,
+            contactPhone: data.contactPhone,
+            notes: data.notes,
+            registrants: data.registrants,
+            error: result.error || "Unknown error",
+          });
+          if (!alert.success) {
+            console.error("Failed to send registration failure alert:", alert.error);
+          }
+        } catch (err) {
+          console.error("Failed to send registration failure alert:", err);
+        }
+
+        return c.json(
+          {
+            error:
+              "We couldn't save your registration. Our team has been notified and will reach out, or please try again.",
+          },
+          500,
+        );
+      }
+
+      const registration = result.registration!;
+      const [retreat, full, adminEmails] = await Promise.all([
+        getRetreatById(data.retreatId),
+        getRetreatRegistrationById(registration.id),
+        getRetreatAdminRecipients(),
+      ]);
+
+      if (retreat && full.registration && full.registrants.length > 0) {
+        // Await both emails: on serverless hosts, work left running after the
+        // response is sent can be cut off, which silently dropped admin emails.
+        const [confirmation, adminNotification] = await Promise.allSettled([
+          sendRetreatConfirmationEmail(
+            data.contactEmail,
+            retreat,
+            full.registration,
+            full.registrants,
+          ),
+          adminEmails.length > 0
+            ? sendAdminRetreatNotificationEmail(
+                adminEmails,
+                retreat,
+                full.registration,
+                full.registrants,
+              )
+            : Promise.resolve({
+                success: false,
+                error:
+                  "No admin recipients (no admin profiles with email and RETREAT_NOTIFICATION_EMAILS unset)",
+              }),
+        ]);
+
+        for (const [label, outcome] of [
+          ["confirmation", confirmation],
+          ["admin notification", adminNotification],
+        ] as const) {
+          if (outcome.status === "rejected") {
+            console.error(`Failed to send retreat ${label} email:`, outcome.reason);
+          } else if (!outcome.value.success) {
+            console.error(`Failed to send retreat ${label} email:`, outcome.value.error);
+          }
+        }
+      } else {
+        console.error(
+          "Skipped retreat emails: could not load retreat or registration",
+          { retreatId: data.retreatId, registrationId: registration.id },
+        );
+      }
+
+      return c.json(
+        {
+          registration,
+          message: "Registration created successfully",
+        },
+        201,
+      );
+    },
+  )
   .get("/all", async (c) => {
     const isAdmin = await checkAdminFromRequest(c.req.raw);
     if (!isAdmin) {

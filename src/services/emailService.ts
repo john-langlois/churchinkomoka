@@ -358,6 +358,86 @@ export async function sendRetreatConfirmationEmail(
   });
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Extra addresses that always receive retreat admin notifications, from the
+ * comma-separated RETREAT_NOTIFICATION_EMAILS env var. Acts as a fallback when
+ * no admin profile has an email set.
+ */
+export function getRetreatNotificationEmailsFromEnv(): string[] {
+  return (process.env.RETREAT_NOTIFICATION_EMAILS || '')
+    .split(',')
+    .map((e) => e.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Alert admins that a retreat registration could not be saved, including the
+ * submitted details so they can follow up manually.
+ */
+export async function sendAdminRetreatFailureEmail(
+  adminEmails: string[],
+  details: {
+    retreatName?: string | null;
+    contactName: string;
+    contactEmail: string;
+    contactPhone?: string | null;
+    notes?: string | null;
+    registrants: RetreatConfirmationRegistrant[];
+    error: string;
+  }
+): Promise<{ success: boolean; error?: string }> {
+  if (adminEmails.length === 0) return { success: true };
+
+  const registrantLines = details.registrants.map(
+    (r) => `${r.firstName} ${r.lastName}`.trim() + (r.age != null ? ` (age ${r.age})` : '')
+  );
+
+  const text = [
+    `Church in Komoka – Retreat registration FAILED to save`,
+    ``,
+    `Someone tried to register${details.retreatName ? ` for ${details.retreatName}` : ''} but the registration could not be saved.`,
+    `Please contact them to complete their registration.`,
+    ``,
+    `Contact: ${details.contactName}`,
+    `Email: ${details.contactEmail}`,
+    details.contactPhone ? `Phone: ${details.contactPhone}` : '',
+    ``,
+    `Registrants (${registrantLines.length}):`,
+    ...registrantLines.map((l) => `  ${l}`),
+    details.notes ? `\nNotes:\n${details.notes}` : '',
+    ``,
+    `Error: ${details.error}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head><meta charset="utf-8"></head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <pre style="white-space: pre-wrap; font-family: inherit; font-size: 15px;">${escapeHtml(text)}</pre>
+      </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: adminEmails,
+    subject: `Action needed: retreat registration failed – ${details.contactName}`,
+    html,
+    text,
+  });
+}
+
 /**
  * Send admin notification email when a new retreat registration is submitted.
  */
@@ -378,7 +458,7 @@ export async function sendAdminRetreatNotificationEmail(
   const registrantsRows = lines
     .map(
       (l) =>
-        `<tr><td style="padding:8px 12px;border-bottom:1px solid #e7e5e4;">${l.name}</td><td style="padding:8px 12px;border-bottom:1px solid #e7e5e4;">${l.tierName}</td><td style="padding:8px 12px;border-bottom:1px solid #e7e5e4;text-align:right;">${hasPricing ? `$${l.price}` : '-'}</td></tr>`
+        `<tr><td style="padding:8px 12px;border-bottom:1px solid #e7e5e4;">${escapeHtml(l.name)}</td><td style="padding:8px 12px;border-bottom:1px solid #e7e5e4;">${l.tierName}</td><td style="padding:8px 12px;border-bottom:1px solid #e7e5e4;text-align:right;">${hasPricing ? `$${l.price}` : '-'}</td></tr>`
     )
     .join('');
 
@@ -399,13 +479,13 @@ export async function sendAdminRetreatNotificationEmail(
         </div>
         <div style="background-color: #fafaf9; padding: 40px; border-radius: 0 0 8px 8px;">
           <h2 style="color: #1c1917; margin-top: 0; font-size: 24px; font-weight: 700;">New Retreat Registration</h2>
-          <p style="color: #57534e; font-size: 16px;">A new registration has been submitted for <strong>${retreat.name}</strong>.</p>
+          <p style="color: #57534e; font-size: 16px;">A new registration has been submitted for <strong>${escapeHtml(retreat.name)}</strong>.</p>
 
           <h3 style="color: #1c1917; font-size: 18px; margin-top: 24px;">Contact Info</h3>
           <table style="color: #57534e; font-size: 15px;">
-            <tr><td style="padding: 4px 12px 4px 0; font-weight: 700; color: #78716c;">Name</td><td>${registration.contactName}</td></tr>
-            <tr><td style="padding: 4px 12px 4px 0; font-weight: 700; color: #78716c;">Email</td><td>${registration.contactEmail}</td></tr>
-            ${registration.contactPhone ? `<tr><td style="padding: 4px 12px 4px 0; font-weight: 700; color: #78716c;">Phone</td><td>${registration.contactPhone}</td></tr>` : ''}
+            <tr><td style="padding: 4px 12px 4px 0; font-weight: 700; color: #78716c;">Name</td><td>${escapeHtml(registration.contactName)}</td></tr>
+            <tr><td style="padding: 4px 12px 4px 0; font-weight: 700; color: #78716c;">Email</td><td>${escapeHtml(registration.contactEmail)}</td></tr>
+            ${registration.contactPhone ? `<tr><td style="padding: 4px 12px 4px 0; font-weight: 700; color: #78716c;">Phone</td><td>${escapeHtml(registration.contactPhone)}</td></tr>` : ''}
           </table>
 
           <h3 style="color: #1c1917; font-size: 18px; margin-top: 24px;">Registrants (${registrants.length})</h3>
@@ -414,7 +494,7 @@ export async function sendAdminRetreatNotificationEmail(
             <tbody>${registrantsRows}${totalRow || ''}</tbody>
           </table>
 
-          ${registration.notes ? `<p style="margin-top: 24px; color: #57534e;"><strong>Notes:</strong><br/>${registration.notes.replace(/\n/g, '<br/>')}</p>` : ''}
+          ${registration.notes ? `<p style="margin-top: 24px; color: #57534e;"><strong>Notes:</strong><br/>${escapeHtml(registration.notes).replace(/\n/g, '<br/>')}</p>` : ''}
 
           ${adminUrl ? `
             <div style="text-align: center; margin: 30px 0;">
