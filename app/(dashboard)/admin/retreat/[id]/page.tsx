@@ -54,6 +54,13 @@ type RegistrationSummary = {
   status: string;
   type: string;
   notes?: string;
+  churchName?: string | null;
+  pastorName?: string | null;
+  pastorContact?: string | null;
+  city?: string | null;
+  country?: string | null;
+  arrivalDate?: string | null;
+  departureDate?: string | null;
   createdAt: string;
 };
 
@@ -569,7 +576,65 @@ function RegistrationDetailModal({
               {registration.contactPhone && (
                 <p className="text-stone-600">{registration.contactPhone}</p>
               )}
+              <p className="text-sm text-stone-500 mt-2">
+                Payment reference:{" "}
+                <span className="font-mono font-bold text-stone-900">
+                  RET-{registration.id.replace(/-/g, "").slice(0, 8).toUpperCase()}
+                </span>
+                {" · "}
+                <a
+                  href={`/retreat/registration/${registration.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-bold text-stone-900 underline"
+                >
+                  Registrant page
+                </a>
+                {" · "}
+                <a
+                  href={`/api/retreat/${registration.id}/pdf`}
+                  className="font-bold text-stone-900 underline"
+                >
+                  PDF
+                </a>
+              </p>
             </div>
+
+            {(registration.churchName ||
+              registration.pastorName ||
+              registration.city ||
+              registration.country ||
+              registration.arrivalDate ||
+              registration.departureDate) && (
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                {[
+                  ["Church", registration.churchName],
+                  [
+                    "Pastor",
+                    registration.pastorName
+                      ? `${registration.pastorName}${registration.pastorContact ? ` (${registration.pastorContact})` : ""}`
+                      : null,
+                  ],
+                  [
+                    "From",
+                    [registration.city, registration.country]
+                      .filter(Boolean)
+                      .join(", ") || null,
+                  ],
+                  ["Arrival", registration.arrivalDate],
+                  ["Departure", registration.departureDate],
+                ]
+                  .filter(([, v]) => v)
+                  .map(([label, value]) => (
+                    <div key={label as string}>
+                      <dt className="font-bold uppercase tracking-widest text-xs text-stone-400">
+                        {label}
+                      </dt>
+                      <dd className="text-stone-700">{value}</dd>
+                    </div>
+                  ))}
+              </dl>
+            )}
 
             <div>
               <label className="block text-sm font-bold uppercase tracking-widest text-stone-400 mb-2">

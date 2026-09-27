@@ -82,6 +82,7 @@ type Retreat = {
   location?: string;
   isActive: boolean;
   pricingTiers?: PricingTier[] | null;
+  paymentInstructions?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -1449,6 +1450,7 @@ function RetreatFormModal({ retreat, onClose, onSave }: { retreat: Retreat | nul
     location: retreat?.location || '',
     isActive: retreat?.isActive ?? false,
     pricingTiers: retreat?.pricingTiers?.length ? [...retreat.pricingTiers] : [],
+    paymentInstructions: retreat?.paymentInstructions || '',
   });
   const tiers = formData.pricingTiers ?? [];
 
@@ -1595,6 +1597,21 @@ function RetreatFormModal({ retreat, onClose, onSave }: { retreat: Retreat | nul
                   </div>
                 ))}
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-bold uppercase tracking-widest text-stone-400 mb-2">
+                Payment instructions
+              </label>
+              <p className="text-xs text-stone-500 mb-3">
+                Shown to registrants on their registration page and confirmation PDF (e.g. e-Transfer email, cash/cheque details, deadline).
+              </p>
+              <textarea
+                value={formData.paymentInstructions ?? ''}
+                onChange={(e) => setFormData({ ...formData, paymentInstructions: e.target.value })}
+                rows={4}
+                placeholder="e.g. Send an Interac e-Transfer to treasurer@churchinkomoka.com by June 1."
+                className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none resize-none"
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>

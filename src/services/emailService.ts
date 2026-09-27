@@ -202,6 +202,13 @@ export type RetreatConfirmationRegistration = {
   contactEmail: string;
   contactPhone?: string | null;
   notes?: string | null;
+  churchName?: string | null;
+  pastorName?: string | null;
+  pastorContact?: string | null;
+  city?: string | null;
+  country?: string | null;
+  arrivalDate?: string | null;
+  departureDate?: string | null;
 };
 
 export type RetreatConfirmationRegistrant = {
@@ -251,8 +258,13 @@ export function computeRetreatPricing(
   return { lines, total };
 }
 
-function formatRetreatDate(d: Date | string | null | undefined): string {
+export function formatRetreatDate(d: Date | string | null | undefined): string {
   if (!d) return 'TBA';
+  // Date-only values (YYYY-MM-DD) have no time zone; format them as-is so they
+  // don't shift a day when converted to Eastern time.
+  if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    return new Date(`${d}T00:00:00Z`).toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+  }
   const date = typeof d === 'string' ? new Date(d) : d;
   return date.toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/New_York' });
 }
@@ -265,13 +277,14 @@ export async function sendRetreatConfirmationEmail(
   to: string,
   retreat: RetreatConfirmationRetreat,
   registration: RetreatConfirmationRegistration,
-  registrants: RetreatConfirmationRegistrant[]
+  registrants: RetreatConfirmationRegistrant[],
+  attachments?: EmailAttachment[]
 ): Promise<{ success: boolean; error?: string }> {
   const { lines, total } = computeRetreatPricing(retreat, registrants);
   const hasPricing = total !== null;
   const registrationId = registration.id;
   const lookupUrl = typeof process.env.NEXT_PUBLIC_APP_URL === 'string'
-    ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')}/retreat?lookup=${registrationId}`
+    ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')}/retreat/registration/${registrationId}`
     : null;
 
   const registrantsRows = lines
@@ -303,9 +316,9 @@ export async function sendRetreatConfirmationEmail(
           <div style="background-color: white; border: 2px solid #1c1917; border-radius: 8px; padding: 16px; margin: 24px 0;">
             <p style="margin: 0 0 8px 0; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #78716c;">Your registration ID</p>
             <p style="margin: 0; font-size: 18px; font-weight: 900; font-family: 'Courier New', monospace; color: #1c1917;">${registrationId}</p>
-            <p style="margin: 8px 0 0 0; font-size: 14px; color: #57534e;">Save this ID to look up your registration on our retreat page.</p>
+            <p style="margin: 8px 0 0 0; font-size: 14px; color: #57534e;">Use this ID to view or update your registration, see how to pay, and download your confirmation.</p>
           </div>
-          ${lookupUrl ? `<p style="margin-bottom: 24px;"><a href="${lookupUrl}" style="color: #1c1917; font-weight: 700;">View your registration</a></p>` : ''}
+          ${lookupUrl ? `<p style="margin-bottom: 24px;"><a href="${lookupUrl}" style="color: #1c1917; font-weight: 700;">View, update or pay for your registration</a></p>` : ''}
 
           <h3 style="color: #1c1917; font-size: 18px; margin-top: 24px;">Retreat details</h3>
           <ul style="color: #57534e; padding-left: 20px;">
@@ -335,7 +348,7 @@ export async function sendRetreatConfirmationEmail(
     `Thank you for registering for ${retreat.name}.`,
     ``,
     `Your registration ID: ${registrationId}`,
-    `Save this ID to look up your registration on our retreat page.`,
+    `Use this ID to view or update your registration, see how to pay, and download your confirmation.`,
     lookupUrl ? `View: ${lookupUrl}` : '',
     ``,
     `Retreat details:`,
@@ -355,6 +368,7 @@ export async function sendRetreatConfirmationEmail(
     subject: `Retreat registration confirmed – ${retreat.name}`,
     html,
     text,
+    attachments,
   });
 }
 
@@ -445,9 +459,30 @@ export async function sendAdminRetreatNotificationEmail(
   adminEmails: string[],
   retreat: RetreatConfirmationRetreat,
   registration: RetreatConfirmationRegistration,
-  registrants: RetreatConfirmationRegistrant[]
+  registrants: RetreatConfirmationRegistrant[],
+  kind: 'new' | 'updated' | 'cancelled' = 'new'
 ): Promise<{ success: boolean; error?: string }> {
   if (adminEmails.length === 0) return { success: true };
+
+  const title = {
+    new: 'New Retreat Registration',
+    updated: 'Retreat Registration Updated',
+    cancelled: 'Retreat Registration Cancelled',
+  }[kind];
+  const intro = {
+    new: 'A new registration has been submitted for',
+    updated: 'A registrant updated their registration for',
+    cancelled: 'A registrant cancelled their registration for',
+  }[kind];
+
+  const detailRows: [string, string | null | undefined][] = [
+    ['Church', registration.churchName],
+    ['Pastor', registration.pastorName ? `${registration.pastorName}${registration.pastorContact ? ` (${registration.pastorContact})` : ''}` : null],
+    ['From', [registration.city, registration.country].filter(Boolean).join(', ') || null],
+    ['Arrival', registration.arrivalDate ? formatRetreatDate(registration.arrivalDate) : null],
+    ['Departure', registration.departureDate ? formatRetreatDate(registration.departureDate) : null],
+  ];
+  const presentDetails = detailRows.filter((r): r is [string, string] => !!r[1]);
 
   const { lines, total } = computeRetreatPricing(retreat, registrants);
   const hasPricing = total !== null;
@@ -478,14 +513,15 @@ export async function sendAdminRetreatNotificationEmail(
           <h1 style="margin: 0; font-size: 28px; font-weight: 900; letter-spacing: -0.5px;">Church in Komoka</h1>
         </div>
         <div style="background-color: #fafaf9; padding: 40px; border-radius: 0 0 8px 8px;">
-          <h2 style="color: #1c1917; margin-top: 0; font-size: 24px; font-weight: 700;">New Retreat Registration</h2>
-          <p style="color: #57534e; font-size: 16px;">A new registration has been submitted for <strong>${escapeHtml(retreat.name)}</strong>.</p>
+          <h2 style="color: #1c1917; margin-top: 0; font-size: 24px; font-weight: 700;">${title}</h2>
+          <p style="color: #57534e; font-size: 16px;">${intro} <strong>${escapeHtml(retreat.name)}</strong>.</p>
 
           <h3 style="color: #1c1917; font-size: 18px; margin-top: 24px;">Contact Info</h3>
           <table style="color: #57534e; font-size: 15px;">
             <tr><td style="padding: 4px 12px 4px 0; font-weight: 700; color: #78716c;">Name</td><td>${escapeHtml(registration.contactName)}</td></tr>
             <tr><td style="padding: 4px 12px 4px 0; font-weight: 700; color: #78716c;">Email</td><td>${escapeHtml(registration.contactEmail)}</td></tr>
             ${registration.contactPhone ? `<tr><td style="padding: 4px 12px 4px 0; font-weight: 700; color: #78716c;">Phone</td><td>${escapeHtml(registration.contactPhone)}</td></tr>` : ''}
+            ${presentDetails.map(([label, value]) => `<tr><td style="padding: 4px 12px 4px 0; font-weight: 700; color: #78716c;">${label}</td><td>${escapeHtml(value)}</td></tr>`).join('')}
           </table>
 
           <h3 style="color: #1c1917; font-size: 18px; margin-top: 24px;">Registrants (${registrants.length})</h3>
@@ -512,13 +548,14 @@ export async function sendAdminRetreatNotificationEmail(
   `;
 
   const text = [
-    `Church in Komoka – New Retreat Registration`,
+    `Church in Komoka – ${title}`,
     ``,
-    `A new registration has been submitted for ${retreat.name}.`,
+    `${intro} ${retreat.name}.`,
     ``,
     `Contact: ${registration.contactName}`,
     `Email: ${registration.contactEmail}`,
     registration.contactPhone ? `Phone: ${registration.contactPhone}` : '',
+    ...presentDetails.map(([label, value]) => `${label}: ${value}`),
     ``,
     `Registrants (${registrants.length}):`,
     ...lines.map((l) => `  ${l.name} – ${l.tierName}${hasPricing ? ` – $${l.price}` : ''}`),
@@ -531,7 +568,7 @@ export async function sendAdminRetreatNotificationEmail(
 
   return sendEmail({
     to: adminEmails,
-    subject: `New retreat registration – ${registration.contactName} – ${retreat.name}`,
+    subject: `${title} – ${registration.contactName} – ${retreat.name}`,
     html,
     text,
   });

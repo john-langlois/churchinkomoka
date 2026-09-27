@@ -1,7 +1,8 @@
 "use client";
 
 import { Suspense, useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowRight,
@@ -56,20 +57,6 @@ type Attendee = {
   age: string;
 };
 
-type LookupRegistration = {
-  id: string;
-  contactName: string;
-  contactEmail: string;
-  status: string;
-  retreatId?: string;
-};
-type LookupRegistrant = {
-  firstName: string;
-  lastName: string;
-  age?: number;
-  isAdult: boolean;
-};
-
 type View = "details" | "register" | "lookup";
 
 const WIZARD_STEPS = [
@@ -98,6 +85,7 @@ export default function RetreatPage() {
 
 function RetreatPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   const [view, setView] = useState<View>("details");
   const [wizardStep, setWizardStep] = useState(0);
@@ -112,11 +100,7 @@ function RetreatPageContent() {
 
   const [lookupId, setLookupId] = useState("");
   const [lookupLoading, setLookupLoading] = useState(false);
-  const [lookupResult, setLookupResult] = useState<
-    | { registration: LookupRegistration; registrants: LookupRegistrant[] }
-    | "not_found"
-    | null
-  >(null);
+  const [lookupError, setLookupError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     fullName: "",
@@ -140,66 +124,32 @@ function RetreatPageContent() {
     fetchActiveRetreats();
   }, []);
 
+  // Old confirmation emails link to /retreat?lookup=<id>
   const lookupParam = searchParams.get("lookup");
   useEffect(() => {
     if (lookupParam?.trim()) {
-      setLookupId(lookupParam.trim());
-      setView("lookup");
-      setLookupResult(null);
+      router.replace(
+        `/retreat/registration/${encodeURIComponent(lookupParam.trim())}`,
+      );
     }
-  }, [lookupParam]);
-
-  useEffect(() => {
-    if (!lookupParam?.trim()) return;
-    const id = lookupParam.trim();
-    let cancelled = false;
-    setLookupLoading(true);
-    setLookupResult(null);
-    fetch(`/api/retreat/${id}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (cancelled) return;
-        if (data?.registration) {
-          setLookupResult({
-            registration: data.registration,
-            registrants: data.registrants || [],
-          });
-        } else {
-          setLookupResult("not_found");
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setLookupResult("not_found");
-      })
-      .finally(() => {
-        if (!cancelled) setLookupLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [lookupParam]);
+  }, [lookupParam, router]);
 
   const handleLookup = async () => {
     const id = lookupId.trim();
     if (!id) return;
     setLookupLoading(true);
-    setLookupResult(null);
+    setLookupError(null);
     try {
-      const res = await fetch(`/api/retreat/${id}`);
+      const res = await fetch(`/api/retreat/${encodeURIComponent(id)}`);
       if (res.ok) {
-        const data = await res.json();
-        setLookupResult({
-          registration: data.registration,
-          registrants: data.registrants || [],
-        });
-      } else {
-        setLookupResult("not_found");
+        router.push(`/retreat/registration/${encodeURIComponent(id)}`);
+        return;
       }
+      setLookupError("Registration not found. Check your ID and try again.");
     } catch {
-      setLookupResult("not_found");
-    } finally {
-      setLookupLoading(false);
+      setLookupError("Something went wrong. Please try again.");
     }
+    setLookupLoading(false);
   };
 
   const fetchActiveRetreats = async () => {
@@ -315,22 +265,6 @@ function RetreatPageContent() {
         };
       });
 
-      const notesParts = [
-        `Church: ${formData.churchName}`,
-        `Pastor: ${formData.pastorName} (${formData.pastorContact})`,
-        `Location: ${formData.city}, ${formData.country}`,
-      ];
-      if (formData.expectedArrivalDate)
-        notesParts.push(
-          `Expected Arrival: ${format(formData.expectedArrivalDate, "yyyy-MM-dd")}`,
-        );
-      if (formData.expectedDepartureDate)
-        notesParts.push(
-          `Expected Departure: ${format(formData.expectedDepartureDate, "yyyy-MM-dd")}`,
-        );
-      if (formData.notes) notesParts.push(formData.notes);
-      const notes = notesParts.join("\n");
-
       const res = await fetch("/api/retreat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -340,7 +274,18 @@ function RetreatPageContent() {
           contactName: formData.fullName.trim(),
           contactEmail: formData.email.trim(),
           contactPhone: formData.phoneNumber.trim(),
-          notes,
+          churchName: formData.churchName.trim(),
+          pastorName: formData.pastorName.trim(),
+          pastorContact: formData.pastorContact.trim(),
+          city: formData.city.trim(),
+          country: formData.country.trim(),
+          arrivalDate: formData.expectedArrivalDate
+            ? format(formData.expectedArrivalDate, "yyyy-MM-dd")
+            : null,
+          departureDate: formData.expectedDepartureDate
+            ? format(formData.expectedDepartureDate, "yyyy-MM-dd")
+            : null,
+          notes: formData.notes.trim() || undefined,
           registrants,
         }),
       });
@@ -447,6 +392,14 @@ function RetreatPageContent() {
                 Save this ID to look up your registration later.
               </p>
             </div>
+          )}
+          {submittedRegistrationId && (
+            <Link
+              href={`/retreat/registration/${submittedRegistrationId}`}
+              className="block w-full mb-3 border-2 border-stone-900 text-stone-900 py-4 rounded-xl font-bold hover:bg-stone-100 transition-colors uppercase tracking-widest text-sm"
+            >
+              View Registration &amp; Payment
+            </Link>
           )}
           <button
             onClick={resetForm}
@@ -687,66 +640,15 @@ function RetreatPageContent() {
               </button>
             </div>
 
-            <AnimatePresence mode="wait">
-              {lookupResult === "not_found" && (
-                <motion.p
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  className="mt-5 text-sm text-red-600 font-medium bg-red-50 p-4 rounded-xl"
-                >
-                  Registration not found. Check your ID and try again.
-                </motion.p>
-              )}
-              {lookupResult && lookupResult !== "not_found" && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  className="mt-6 p-6 bg-stone-50 rounded-xl border border-stone-200"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <p className="font-bold text-lg text-stone-900">
-                        {lookupResult.registration.contactName}
-                      </p>
-                      <p className="text-sm text-stone-500">
-                        {lookupResult.registration.contactEmail}
-                      </p>
-                    </div>
-                    <span
-                      className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase ${
-                        lookupResult.registration.status === "confirmed"
-                          ? "bg-green-100 text-green-700"
-                          : lookupResult.registration.status === "pending"
-                            ? "bg-yellow-100 text-yellow-700"
-                            : "bg-stone-200 text-stone-700"
-                      }`}
-                    >
-                      {lookupResult.registration.status}
-                    </span>
-                  </div>
-                  <div className="pt-4 border-t border-stone-200">
-                    <p className="text-sm font-bold uppercase tracking-widest text-stone-400 mb-2">
-                      {lookupResult.registrants.length} Registrant
-                      {lookupResult.registrants.length !== 1 ? "s" : ""}
-                    </p>
-                    <div className="space-y-1">
-                      {lookupResult.registrants.map((r, i) => (
-                        <p key={i} className="text-stone-900 font-medium">
-                          {r.firstName} {r.lastName}
-                          {r.age != null && (
-                            <span className="text-stone-400 ml-2">
-                              Age {r.age}
-                            </span>
-                          )}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {lookupError && (
+              <motion.p
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-5 text-sm text-red-600 font-medium bg-red-50 p-4 rounded-xl"
+              >
+                {lookupError}
+              </motion.p>
+            )}
           </div>
         </div>
       </div>

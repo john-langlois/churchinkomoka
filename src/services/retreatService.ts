@@ -1,6 +1,6 @@
 import { db } from '@/src/lib/db/connection';
 import { retreats, retreatRegistrations, retreatRegistrants } from '@/src/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray, asc } from 'drizzle-orm';
 import type { 
   Retreat,
   NewRetreat,
@@ -76,6 +76,7 @@ export async function createRetreat(
     location?: string;
     isActive?: boolean;
     pricingTiers?: PricingTier[] | null;
+    paymentInstructions?: string | null;
   }
 ): Promise<{ success: boolean; retreat: Retreat | null; error?: string }> {
   try {
@@ -87,6 +88,7 @@ export async function createRetreat(
       location: data.location || null,
       isActive: data.isActive ?? false,
       pricingTiers: data.pricingTiers ?? null,
+      paymentInstructions: data.paymentInstructions || null,
     };
 
     const [retreat] = await db
@@ -118,6 +120,7 @@ export async function updateRetreat(
     location?: string;
     isActive?: boolean;
     pricingTiers?: PricingTier[] | null;
+    paymentInstructions?: string | null;
   }
 ): Promise<{ success: boolean; retreat: Retreat | null; error?: string }> {
   try {
@@ -132,6 +135,7 @@ export async function updateRetreat(
     if (data.location !== undefined) updateData.location = data.location || null;
     if (data.isActive !== undefined) updateData.isActive = data.isActive;
     if (data.pricingTiers !== undefined) updateData.pricingTiers = data.pricingTiers ?? null;
+    if (data.paymentInstructions !== undefined) updateData.paymentInstructions = data.paymentInstructions || null;
 
     const [retreat] = await db
       .update(retreats)
@@ -205,6 +209,54 @@ export async function toggleRetreatActive(
   }
 }
 
+export type RegistrantInput = {
+  id?: string;
+  firstName: string;
+  lastName: string;
+  age?: number;
+  isAdult: boolean;
+  dietaryRestrictions?: string;
+  medicalNotes?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  profileId?: string;
+};
+
+export type RegistrationDetailsInput = {
+  churchName?: string;
+  pastorName?: string;
+  pastorContact?: string;
+  city?: string;
+  country?: string;
+  arrivalDate?: string | null; // YYYY-MM-DD
+  departureDate?: string | null; // YYYY-MM-DD
+};
+
+function detailsToColumns(d: RegistrationDetailsInput) {
+  return {
+    churchName: d.churchName || null,
+    pastorName: d.pastorName || null,
+    pastorContact: d.pastorContact || null,
+    city: d.city || null,
+    country: d.country || null,
+    arrivalDate: d.arrivalDate || null,
+    departureDate: d.departureDate || null,
+  };
+}
+
+function registrantToColumns(reg: RegistrantInput) {
+  return {
+    firstName: reg.firstName,
+    lastName: reg.lastName,
+    age: reg.age ?? null,
+    isAdult: reg.isAdult,
+    dietaryRestrictions: reg.dietaryRestrictions || null,
+    medicalNotes: reg.medicalNotes || null,
+    emergencyContactName: reg.emergencyContactName || null,
+    emergencyContactPhone: reg.emergencyContactPhone || null,
+  };
+}
+
 /**
  * Create a new retreat registration (individual or family)
  */
@@ -217,18 +269,8 @@ export async function createRetreatRegistration(
     contactEmail: string;
     contactPhone?: string;
     notes?: string;
-    registrants: Array<{
-      firstName: string;
-      lastName: string;
-      age?: number;
-      isAdult: boolean;
-      dietaryRestrictions?: string;
-      medicalNotes?: string;
-      emergencyContactName?: string;
-      emergencyContactPhone?: string;
-      profileId?: string;
-    }>;
-  }
+    registrants: RegistrantInput[];
+  } & RegistrationDetailsInput
 ): Promise<{ success: boolean; registration: RetreatRegistration | null; error?: string }> {
   try {
     // Insert the registration and its registrants atomically so a failure
@@ -242,6 +284,7 @@ export async function createRetreatRegistration(
         contactEmail: registrationData.contactEmail,
         contactPhone: registrationData.contactPhone || null,
         notes: registrationData.notes || null,
+        ...detailsToColumns(registrationData),
         status: 'pending',
       };
 
@@ -253,14 +296,7 @@ export async function createRetreatRegistration(
       const registrantsToInsert: NewRetreatRegistrant[] = registrationData.registrants.map(reg => ({
         registrationId: created.id,
         profileId: reg.profileId || null,
-        firstName: reg.firstName,
-        lastName: reg.lastName,
-        age: reg.age ?? null,
-        isAdult: reg.isAdult,
-        dietaryRestrictions: reg.dietaryRestrictions || null,
-        medicalNotes: reg.medicalNotes || null,
-        emergencyContactName: reg.emergencyContactName || null,
-        emergencyContactPhone: reg.emergencyContactPhone || null,
+        ...registrantToColumns(reg),
       }));
 
       await tx.insert(retreatRegistrants).values(registrantsToInsert);
@@ -275,6 +311,82 @@ export async function createRetreatRegistration(
       success: false, 
       registration: null, 
       error: error instanceof Error ? error.message : 'Failed to create registration' 
+    };
+  }
+}
+
+/**
+ * Update a registration's contact details and attendees. Attendees with an
+ * `id` belonging to this registration are updated, ones without an id are
+ * added, and existing attendees missing from the list are removed.
+ */
+export async function updateRetreatRegistration(
+  registrationId: string,
+  data: {
+    contactName: string;
+    contactEmail: string;
+    contactPhone?: string;
+    notes?: string;
+    registrants: RegistrantInput[];
+  } & RegistrationDetailsInput
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(retreatRegistrations)
+        .set({
+          type: data.registrants.length > 1 ? 'family' : 'individual',
+          contactName: data.contactName,
+          contactEmail: data.contactEmail,
+          contactPhone: data.contactPhone || null,
+          notes: data.notes || null,
+          ...detailsToColumns(data),
+          updatedAt: new Date(),
+        })
+        .where(eq(retreatRegistrations.id, registrationId));
+
+      const existing = await tx
+        .select({ id: retreatRegistrants.id })
+        .from(retreatRegistrants)
+        .where(eq(retreatRegistrants.registrationId, registrationId));
+      const existingIds = new Set(existing.map((r) => r.id));
+
+      const keepIds = new Set<string>();
+      for (const reg of data.registrants) {
+        if (reg.id && existingIds.has(reg.id)) {
+          keepIds.add(reg.id);
+          await tx
+            .update(retreatRegistrants)
+            .set({ ...registrantToColumns(reg), updatedAt: new Date() })
+            .where(eq(retreatRegistrants.id, reg.id));
+        } else {
+          await tx.insert(retreatRegistrants).values({
+            registrationId,
+            profileId: null,
+            ...registrantToColumns(reg),
+          });
+        }
+      }
+
+      const toDelete = [...existingIds].filter((id) => !keepIds.has(id));
+      if (toDelete.length > 0) {
+        await tx
+          .delete(retreatRegistrants)
+          .where(
+            and(
+              eq(retreatRegistrants.registrationId, registrationId),
+              inArray(retreatRegistrants.id, toDelete)
+            )
+          );
+      }
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error in updateRetreatRegistration:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update registration',
     };
   }
 }
@@ -302,7 +414,8 @@ export async function getRetreatRegistrationById(
     const registrants = await db
       .select()
       .from(retreatRegistrants)
-      .where(eq(retreatRegistrants.registrationId, registrationId));
+      .where(eq(retreatRegistrants.registrationId, registrationId))
+      .orderBy(asc(retreatRegistrants.createdAt));
 
     return { 
       registration: registration[0], 
@@ -371,6 +484,13 @@ export async function getRetreatRegistrantsWithRegistrations(retreatId: string) 
           status: retreatRegistrations.status,
           type: retreatRegistrations.type,
           notes: retreatRegistrations.notes,
+          churchName: retreatRegistrations.churchName,
+          pastorName: retreatRegistrations.pastorName,
+          pastorContact: retreatRegistrations.pastorContact,
+          city: retreatRegistrations.city,
+          country: retreatRegistrations.country,
+          arrivalDate: retreatRegistrations.arrivalDate,
+          departureDate: retreatRegistrations.departureDate,
           createdAt: retreatRegistrations.createdAt,
         },
       })

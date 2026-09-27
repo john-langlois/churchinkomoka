@@ -16,7 +16,13 @@ import {
   updateRetreat,
   deleteRetreat,
   toggleRetreatActive,
+  updateRetreatRegistration,
 } from "@/src/services/retreatService";
+import {
+  generateRetreatConfirmationPdf,
+  getPaymentReference,
+} from "@/src/services/retreatPdfService";
+import { computeRetreatPricing } from "@/src/services/emailService";
 import {
   sendRetreatConfirmationEmail,
   sendAdminRetreatNotificationEmail,
@@ -56,21 +62,122 @@ const registrantSchema = z.object({
   profileId: z.string().uuid().optional(),
 });
 
+const optionalText = (max: number, label: string) =>
+  z.string().trim().max(max, `${label} is too long`).optional();
+
+const optionalDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Dates must be in YYYY-MM-DD format")
+  .nullable()
+  .optional()
+  .or(z.literal("").transform(() => null));
+
+// Fields shared by creating and editing a registration
+const registrationFields = {
+  contactName: z.string().trim().min(1, "Contact name is required"),
+  contactEmail: z.string().trim().email("Valid email is required"),
+  contactPhone: optionalText(50, "Phone number"),
+  churchName: optionalText(255, "Church name"),
+  pastorName: optionalText(255, "Pastor name"),
+  pastorContact: optionalText(255, "Pastor contact"),
+  city: optionalText(255, "City"),
+  country: optionalText(255, "Country"),
+  arrivalDate: optionalDate,
+  departureDate: optionalDate,
+  notes: z.string().optional(),
+};
+
 const createRegistrationSchema = z.object({
   retreatId: z.string().uuid("Valid retreat ID is required"),
   type: z.enum(["individual", "family"]),
-  contactName: z.string().trim().min(1, "Contact name is required"),
-  contactEmail: z.string().trim().email("Valid email is required"),
-  contactPhone: z
-    .string()
-    .trim()
-    .max(50, "Phone number is too long")
-    .optional(),
-  notes: z.string().optional(),
+  ...registrationFields,
   registrants: z
     .array(registrantSchema)
     .min(1, "At least one registrant is required"),
 });
+
+const updateRegistrationSchema = z.object({
+  ...registrationFields,
+  registrants: z
+    .array(
+      registrantSchema
+        .omit({ profileId: true })
+        .extend({ id: z.string().uuid().optional() }),
+    )
+    .min(1, "At least one attendee is required"),
+});
+
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Turn the first zod issue into a readable `{ error }` response
+function validationHook(
+  result: { success: boolean; error?: z.ZodError },
+  c: any,
+) {
+  if (!result.success) {
+    const issue = result.error?.issues[0];
+    return c.json(
+      { error: issue?.message || "Invalid registration details" },
+      400,
+    );
+  }
+}
+
+/**
+ * Load a registration with its retreat, pricing and editability, for the
+ * public registration page and PDF.
+ */
+async function loadRegistrationBundle(id: string) {
+  if (!uuidPattern.test(id)) return null;
+  const { registration, registrants } = await getRetreatRegistrationById(id);
+  if (!registration) return null;
+  const retreat = registration.retreatId
+    ? await getRetreatById(registration.retreatId)
+    : null;
+
+  let editLockedReason: string | null = null;
+  if (registration.status === "cancelled") {
+    editLockedReason = "This registration has been cancelled.";
+  } else if (retreat?.startDate && new Date(retreat.startDate) <= new Date()) {
+    editLockedReason =
+      "The retreat has already started, so changes can no longer be made online. Please contact us.";
+  }
+
+  return {
+    registration,
+    registrants,
+    retreat,
+    pricing: retreat ? computeRetreatPricing(retreat, registrants) : null,
+    paymentReference: getPaymentReference(registration.id),
+    canEdit: editLockedReason === null,
+    editLockedReason,
+  };
+}
+
+async function notifyAdminsOfChange(
+  id: string,
+  kind: "updated" | "cancelled",
+) {
+  try {
+    const bundle = await loadRegistrationBundle(id);
+    if (!bundle?.retreat) return;
+    const adminEmails = await getRetreatAdminRecipients();
+    if (adminEmails.length === 0) return;
+    const result = await sendAdminRetreatNotificationEmail(
+      adminEmails,
+      bundle.retreat,
+      bundle.registration,
+      bundle.registrants,
+      kind,
+    );
+    if (!result.success) {
+      console.error(`Failed to send retreat ${kind} email:`, result.error);
+    }
+  } catch (err) {
+    console.error(`Failed to send retreat ${kind} email:`, err);
+  }
+}
 
 // Validation schemas for retreat management
 const dateOrDateTimeSchema = z
@@ -102,6 +209,7 @@ const createRetreatSchema = z.object({
   location: z.string().optional(),
   isActive: z.boolean().default(false),
   pricingTiers: z.array(pricingTierSchema).optional().nullable(),
+  paymentInstructions: z.string().optional().nullable(),
 });
 
 const updateRetreatSchema = createRetreatSchema.partial();
@@ -158,6 +266,7 @@ const retreat = new Hono()
       location: data.location || undefined,
       isActive: data.isActive ?? false,
       pricingTiers: data.pricingTiers ?? null,
+      paymentInstructions: data.paymentInstructions || null,
     });
 
     if (!result.success) {
@@ -196,6 +305,8 @@ const retreat = new Hono()
     if (data.isActive !== undefined) updateData.isActive = data.isActive;
     if (data.pricingTiers !== undefined)
       updateData.pricingTiers = data.pricingTiers ?? null;
+    if (data.paymentInstructions !== undefined)
+      updateData.paymentInstructions = data.paymentInstructions || null;
 
     const result = await updateRetreat(id, updateData);
 
@@ -253,15 +364,7 @@ const retreat = new Hono()
   // Registration routes
   .post(
     "/",
-    zValidator("json", createRegistrationSchema, (result, c) => {
-      if (!result.success) {
-        const issue = result.error.issues[0];
-        return c.json(
-          { error: issue?.message || "Invalid registration details" },
-          400,
-        );
-      }
-    }),
+    zValidator("json", createRegistrationSchema, validationHook),
     async (c) => {
       const data = c.req.valid("json");
 
@@ -282,6 +385,13 @@ const retreat = new Hono()
         contactName: data.contactName,
         contactEmail: data.contactEmail,
         contactPhone: data.contactPhone,
+        churchName: data.churchName,
+        pastorName: data.pastorName,
+        pastorContact: data.pastorContact,
+        city: data.city,
+        country: data.country,
+        arrivalDate: data.arrivalDate,
+        departureDate: data.departureDate,
         notes: data.notes,
         registrants: data.registrants,
       });
@@ -299,7 +409,18 @@ const retreat = new Hono()
             contactName: data.contactName,
             contactEmail: data.contactEmail,
             contactPhone: data.contactPhone,
-            notes: data.notes,
+            notes: [
+              data.churchName && `Church: ${data.churchName}`,
+              data.pastorName &&
+                `Pastor: ${data.pastorName}${data.pastorContact ? ` (${data.pastorContact})` : ""}`,
+              (data.city || data.country) &&
+                `From: ${[data.city, data.country].filter(Boolean).join(", ")}`,
+              data.arrivalDate && `Arrival: ${data.arrivalDate}`,
+              data.departureDate && `Departure: ${data.departureDate}`,
+              data.notes,
+            ]
+              .filter(Boolean)
+              .join("\n"),
             registrants: data.registrants,
             error: result.error || "Unknown error",
           });
@@ -327,6 +448,24 @@ const retreat = new Hono()
       ]);
 
       if (retreat && full.registration && full.registrants.length > 0) {
+        let attachments: { filename: string; content: Buffer }[] | undefined;
+        try {
+          const pdf = await generateRetreatConfirmationPdf(
+            retreat,
+            full.registration,
+            full.registrants,
+          );
+          attachments = [
+            {
+              filename: `retreat-registration-${getPaymentReference(registration.id)}.pdf`,
+              content: Buffer.from(pdf),
+            },
+          ];
+        } catch (err) {
+          // Still send the email without the PDF
+          console.error("Failed to generate confirmation PDF:", err);
+        }
+
         // Await both emails: on serverless hosts, work left running after the
         // response is sent can be cut off, which silently dropped admin emails.
         const [confirmation, adminNotification] = await Promise.allSettled([
@@ -335,6 +474,7 @@ const retreat = new Hono()
             retreat,
             full.registration,
             full.registrants,
+            attachments,
           ),
           adminEmails.length > 0
             ? sendAdminRetreatNotificationEmail(
@@ -394,19 +534,92 @@ const retreat = new Hono()
 
     return c.json({ registrations });
   })
-  .get("/:id", async (c) => {
-    const id = c.req.param("id");
-
-    const result = await getRetreatRegistrationById(id);
-
-    if (!result.registration) {
+  .get("/:id/pdf", async (c) => {
+    const bundle = await loadRegistrationBundle(c.req.param("id"));
+    if (!bundle || !bundle.retreat) {
       return c.json({ error: "Registration not found" }, 404);
     }
 
-    return c.json({
-      registration: result.registration,
-      registrants: result.registrants,
+    const pdf = await generateRetreatConfirmationPdf(
+      bundle.retreat,
+      bundle.registration,
+      bundle.registrants,
+    );
+    return c.body(pdf as unknown as ArrayBuffer, 200, {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="retreat-registration-${bundle.paymentReference}.pdf"`,
+      "Cache-Control": "no-store",
     });
+  })
+  .get("/:id", async (c) => {
+    const bundle = await loadRegistrationBundle(c.req.param("id"));
+    if (!bundle) {
+      return c.json({ error: "Registration not found" }, 404);
+    }
+
+    const { retreat, ...rest } = bundle;
+    return c.json({
+      ...rest,
+      retreat: retreat
+        ? {
+            id: retreat.id,
+            name: retreat.name,
+            description: retreat.description,
+            startDate: retreat.startDate,
+            endDate: retreat.endDate,
+            location: retreat.location,
+            pricingTiers: retreat.pricingTiers,
+            paymentInstructions: retreat.paymentInstructions,
+          }
+        : null,
+    });
+  })
+  .put(
+    "/:id",
+    zValidator("json", updateRegistrationSchema, validationHook),
+    async (c) => {
+      const id = c.req.param("id");
+      const bundle = await loadRegistrationBundle(id);
+      if (!bundle) {
+        return c.json({ error: "Registration not found" }, 404);
+      }
+      if (!bundle.canEdit) {
+        return c.json({ error: bundle.editLockedReason }, 409);
+      }
+
+      const data = c.req.valid("json");
+      const result = await updateRetreatRegistration(id, data);
+      if (!result.success) {
+        return c.json(
+          { error: "We couldn't save your changes. Please try again." },
+          500,
+        );
+      }
+
+      await notifyAdminsOfChange(id, "updated");
+      return c.json({ message: "Registration updated successfully" });
+    },
+  )
+  .post("/:id/cancel", async (c) => {
+    const id = c.req.param("id");
+    const bundle = await loadRegistrationBundle(id);
+    if (!bundle) {
+      return c.json({ error: "Registration not found" }, 404);
+    }
+    if (!bundle.canEdit) {
+      return c.json({ error: bundle.editLockedReason }, 409);
+    }
+
+    const result = await updateRegistrationStatus(id, "cancelled");
+    if (!result.success) {
+      return c.json(
+        { error: "We couldn't cancel your registration. Please try again." },
+        500,
+      );
+    }
+
+    await notifyAdminsOfChange(id, "cancelled");
+    return c.json({ message: "Registration cancelled" });
   })
   .put(
     "/:id/status",

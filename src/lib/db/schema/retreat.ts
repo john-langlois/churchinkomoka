@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, integer, pgEnum, boolean, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, integer, pgEnum, boolean, jsonb, date } from 'drizzle-orm/pg-core';
 import { profiles } from './profiles';
 
 /** Dynamic pricing tier: age range, name, and free or price in dollars */
@@ -31,6 +31,7 @@ export const retreats = pgTable('retreats', {
   location: varchar('location', { length: 255 }),
   isActive: boolean('is_active').default(false).notNull(),
   pricingTiers: jsonb('pricing_tiers').$type<PricingTier[]>(),
+  paymentInstructions: text('payment_instructions'), // Shown to registrants on their registration page
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -45,6 +46,13 @@ export const retreatRegistrations = pgTable('retreat_registrations', {
   contactEmail: varchar('contact_email', { length: 255 }).notNull(),
   contactPhone: varchar('contact_phone', { length: 50 }),
   status: registrationStatusEnum('status').default('pending').notNull(),
+  churchName: varchar('church_name', { length: 255 }),
+  pastorName: varchar('pastor_name', { length: 255 }),
+  pastorContact: varchar('pastor_contact', { length: 255 }),
+  city: varchar('city', { length: 255 }),
+  country: varchar('country', { length: 255 }),
+  arrivalDate: date('arrival_date'), // YYYY-MM-DD
+  departureDate: date('departure_date'), // YYYY-MM-DD
   notes: text('notes'), // Additional notes from the registration form
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
