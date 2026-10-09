@@ -17,6 +17,7 @@ import {
   deleteRetreat,
   toggleRetreatActive,
   updateRetreatRegistration,
+  deleteRetreatRegistration,
 } from "@/src/services/retreatService";
 import {
   generateRetreatConfirmationPdf,
@@ -128,7 +129,7 @@ function validationHook(
  * Load a registration with its retreat, pricing and editability, for the
  * public registration page and PDF.
  */
-async function loadRegistrationBundle(id: string) {
+async function loadRegistrationBundle(id: string, isAdmin = false) {
   if (!uuidPattern.test(id)) return null;
   const { registration, registrants } = await getRetreatRegistrationById(id);
   if (!registration) return null;
@@ -136,8 +137,11 @@ async function loadRegistrationBundle(id: string) {
     ? await getRetreatById(registration.retreatId)
     : null;
 
+  // Admins can always edit, e.g. after the retreat starts or a cancellation.
   let editLockedReason: string | null = null;
-  if (registration.status === "cancelled") {
+  if (isAdmin) {
+    editLockedReason = null;
+  } else if (registration.status === "cancelled") {
     editLockedReason = "This registration has been cancelled.";
   } else if (retreat?.startDate && new Date(retreat.startDate) <= new Date()) {
     editLockedReason =
@@ -552,7 +556,8 @@ const retreat = new Hono()
     });
   })
   .get("/:id", async (c) => {
-    const bundle = await loadRegistrationBundle(c.req.param("id"));
+    const isAdmin = await checkAdminFromRequest(c.req.raw);
+    const bundle = await loadRegistrationBundle(c.req.param("id"), isAdmin);
     if (!bundle) {
       return c.json({ error: "Registration not found" }, 404);
     }
@@ -579,7 +584,8 @@ const retreat = new Hono()
     zValidator("json", updateRegistrationSchema, validationHook),
     async (c) => {
       const id = c.req.param("id");
-      const bundle = await loadRegistrationBundle(id);
+      const isAdmin = await checkAdminFromRequest(c.req.raw);
+      const bundle = await loadRegistrationBundle(id, isAdmin);
       if (!bundle) {
         return c.json({ error: "Registration not found" }, 404);
       }
@@ -596,10 +602,34 @@ const retreat = new Hono()
         );
       }
 
-      await notifyAdminsOfChange(id, "updated");
+      // Admins made this change themselves, so there is nobody to notify
+      if (!isAdmin) await notifyAdminsOfChange(id, "updated");
       return c.json({ message: "Registration updated successfully" });
     },
   )
+  .delete("/:id", async (c) => {
+    const isAdmin = await checkAdminFromRequest(c.req.raw);
+    if (!isAdmin) {
+      return c.json({ error: "Unauthorized" }, 403);
+    }
+
+    const id = c.req.param("id");
+    if (!uuidPattern.test(id)) {
+      return c.json({ error: "Registration not found" }, 404);
+    }
+
+    const result = await deleteRetreatRegistration(id);
+    if (!result.found) {
+      return c.json({ error: "Registration not found" }, 404);
+    }
+    if (!result.success) {
+      return c.json(
+        { error: result.error || "Failed to delete registration" },
+        500,
+      );
+    }
+    return c.json({ message: "Registration deleted successfully" });
+  })
   .post("/:id/cancel", async (c) => {
     const id = c.req.param("id");
     const bundle = await loadRegistrationBundle(id);

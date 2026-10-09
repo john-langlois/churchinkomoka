@@ -553,7 +553,7 @@ export default function RegistrationClient({ id }: { id: string }) {
               </Card>
 
               {/* Cancel */}
-              {canEdit && (
+              {canEdit && !isCancelled && (
                 <div className="bg-white rounded-3xl border border-stone-100 p-6 md:p-8">
                   {!confirmCancel ? (
                     <button

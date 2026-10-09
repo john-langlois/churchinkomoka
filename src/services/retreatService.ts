@@ -392,6 +392,29 @@ export async function updateRetreatRegistration(
 }
 
 /**
+ * Permanently delete a registration. Its registrants are removed by the
+ * foreign key's ON DELETE CASCADE.
+ */
+export async function deleteRetreatRegistration(
+  registrationId: string
+): Promise<{ success: boolean; found: boolean; error?: string }> {
+  try {
+    const deleted = await db
+      .delete(retreatRegistrations)
+      .where(eq(retreatRegistrations.id, registrationId))
+      .returning({ id: retreatRegistrations.id });
+    return { success: true, found: deleted.length > 0 };
+  } catch (error) {
+    console.error('Error in deleteRetreatRegistration:', error);
+    return {
+      success: false,
+      found: true,
+      error: error instanceof Error ? error.message : 'Failed to delete registration',
+    };
+  }
+}
+
+/**
  * Get a retreat registration by ID with all registrants
  */
 export async function getRetreatRegistrationById(

@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  Pencil,
 } from "lucide-react";
 import {
   Select,
@@ -169,6 +170,24 @@ export default function RetreatDetailPage({
       }
     } catch (error) {
       console.error("Error updating status:", error);
+    }
+  };
+
+  const handleDeleteRegistration = async (registrationId: string) => {
+    try {
+      const res = await fetch(`/api/retreat/${registrationId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setViewingRegistration(null);
+        fetchData();
+      } else {
+        const data = await res.json().catch(() => null);
+        alert(data?.error || "Failed to delete registration");
+      }
+    } catch (error) {
+      console.error("Error deleting registration:", error);
+      alert("Failed to delete registration");
     }
   };
 
@@ -570,6 +589,7 @@ export default function RetreatDetailPage({
           pricingTiers={retreat.pricingTiers}
           onClose={() => setViewingRegistration(null)}
           onUpdateStatus={handleStatusUpdate}
+          onDelete={handleDeleteRegistration}
         />
       )}
 
@@ -591,13 +611,17 @@ function RegistrationDetailModal({
   pricingTiers,
   onClose,
   onUpdateStatus,
+  onDelete,
 }: {
   registration: RegistrationSummary;
   registrants: Registrant[];
   pricingTiers?: PricingTier[] | null;
   onClose: () => void;
   onUpdateStatus: (id: string, status: string) => void;
+  onDelete: (id: string) => Promise<void>;
 }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const groupTotal = pricingTiers?.length
     ? registrants.reduce((sum, reg) => {
         const t = tierForAge(reg.age, pricingTiers);
@@ -777,6 +801,61 @@ function RegistrationDetailModal({
                   <span className="text-xl font-black text-stone-900">
                     ${groupTotal}
                   </span>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-6 border-t border-stone-100">
+              {!confirmDelete ? (
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <a
+                    href={`/retreat/registration/${registration.id}`}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-stone-900 text-white rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-stone-700 transition-colors"
+                  >
+                    <Pencil size={16} />
+                    Edit registration
+                  </a>
+                  <button
+                    onClick={() => setConfirmDelete(true)}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white text-red-600 border border-red-200 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 size={16} />
+                    Delete
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
+                  <p className="font-bold text-stone-900 mb-1">
+                    Delete this registration?
+                  </p>
+                  <p className="text-sm text-stone-600 mb-4">
+                    This permanently removes {registration.contactName}&apos;s
+                    registration and its {registrants.length}{" "}
+                    {registrants.length === 1 ? "registrant" : "registrants"}.
+                    It can&apos;t be undone. To keep a record, set the status to
+                    Cancelled instead.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button
+                      onClick={async () => {
+                        setDeleting(true);
+                        await onDelete(registration.id);
+                        setDeleting(false);
+                      }}
+                      disabled={deleting}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-600 text-white rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-red-700 transition-colors disabled:opacity-60"
+                    >
+                      {deleting && <Loader2 size={16} className="animate-spin" />}
+                      Yes, delete
+                    </button>
+                    <button
+                      onClick={() => setConfirmDelete(false)}
+                      disabled={deleting}
+                      className="flex-1 px-4 py-3 bg-white border border-stone-200 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-stone-100 transition-colors"
+                    >
+                      Keep it
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
