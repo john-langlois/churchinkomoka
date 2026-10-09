@@ -16,6 +16,7 @@ import {
   Search,
   ChevronDown,
   ChevronRight,
+  Download,
 } from "lucide-react";
 import {
   Select,
@@ -24,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/src/components/ui/select";
+import { exportRegistrationsToExcel } from "@/src/lib/exportRegistrations";
 
 type PricingTier = {
   name: string;
@@ -109,6 +111,7 @@ export default function RetreatDetailPage({
   const [viewingRegistration, setViewingRegistration] =
     useState<RegistrationSummary | null>(null);
   const [search, setSearch] = useState("");
+  const [exporting, setExporting] = useState(false);
 
   const isModalOpen = showEditForm || viewingRegistration !== null;
   useEffect(() => {
@@ -235,6 +238,32 @@ export default function RetreatDetailPage({
     );
   }, [rows, search]);
 
+  const handleExport = async () => {
+    if (!retreat) return;
+    setExporting(true);
+    try {
+      const all = new Map<string, RegistrationGroup>();
+      for (const row of rows) {
+        const g = all.get(row.registration.id);
+        if (g) g.registrants.push(row.registrant);
+        else
+          all.set(row.registration.id, {
+            registration: row.registration,
+            registrants: [row.registrant],
+          });
+      }
+      await exportRegistrationsToExcel(
+        retreat.name,
+        Array.from(all.values()),
+        retreat.pricingTiers,
+      );
+    } catch (error) {
+      console.error("Error exporting registrants:", error);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const toggleGroup = (id: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
@@ -281,7 +310,7 @@ export default function RetreatDetailPage({
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <div className="max-w-[1400px] mx-auto px-6 md:px-12 pt-24 pb-12">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 md:px-12 pt-20 md:pt-24 pb-12">
         <button
           onClick={() => router.push("/admin")}
           className="flex items-center gap-2 text-stone-500 hover:text-stone-900 mb-4 font-bold text-sm uppercase tracking-widest transition-colors"
@@ -290,9 +319,9 @@ export default function RetreatDetailPage({
           Back to Admin
         </button>
 
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-4xl font-black tracking-tight text-stone-900">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 md:mb-8">
+          <div className="min-w-0">
+            <h1 className="text-3xl md:text-4xl font-black tracking-tight text-stone-900">
               {retreat.name}
             </h1>
             {retreat.description && (
@@ -301,23 +330,37 @@ export default function RetreatDetailPage({
               </p>
             )}
           </div>
-          <button
-            onClick={() => setShowEditForm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-stone-900 text-white rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-stone-700 transition-colors"
-          >
-            <Edit size={16} />
-            Edit
-          </button>
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={handleExport}
+              disabled={exporting || rows.length === 0}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-white text-stone-900 border border-stone-200 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-stone-100 transition-colors disabled:opacity-50"
+            >
+              {exporting ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Download size={16} />
+              )}
+              Export
+            </button>
+            <button
+              onClick={() => setShowEditForm(true)}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-stone-900 text-white rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-stone-700 transition-colors"
+            >
+              <Edit size={16} />
+              Edit
+            </button>
+          </div>
         </div>
 
         {/* 2 Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
-          <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
+        <div className="grid grid-cols-2 gap-3 md:gap-4 mb-6 md:mb-10">
+          <div className="bg-white p-4 md:p-6 rounded-2xl border border-stone-200 shadow-sm">
             <div className="flex items-center gap-3 mb-2">
               <div className="w-10 h-10 bg-stone-100 rounded-xl flex items-center justify-center">
                 <Users className="w-5 h-5 text-stone-600" />
               </div>
-              <h3 className="text-sm font-bold uppercase tracking-widest text-stone-400">
+              <h3 className="text-xs md:text-sm font-bold uppercase tracking-widest text-stone-400">
                 Total Registrants
               </h3>
             </div>
@@ -326,12 +369,12 @@ export default function RetreatDetailPage({
             </p>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-sm">
+          <div className="bg-white p-4 md:p-6 rounded-2xl border border-stone-200 shadow-sm">
             <div className="flex items-center gap-3 mb-2">
               <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
                 <CheckCircle2 className="w-5 h-5 text-green-600" />
               </div>
-              <h3 className="text-sm font-bold uppercase tracking-widest text-stone-400">
+              <h3 className="text-xs md:text-sm font-bold uppercase tracking-widest text-stone-400">
                 Total Paid
               </h3>
             </div>
@@ -341,11 +384,11 @@ export default function RetreatDetailPage({
 
         {/* Grouped Data Table */}
         <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-5 border-b border-stone-100 flex items-center justify-between gap-4">
+          <div className="px-4 md:px-6 py-4 md:py-5 border-b border-stone-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 md:gap-4">
             <h2 className="text-lg font-bold text-stone-900 shrink-0">
               Registrations
             </h2>
-            <div className="relative max-w-sm w-full">
+            <div className="relative sm:max-w-sm w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
               <input
                 type="text"
@@ -380,10 +423,10 @@ export default function RetreatDetailPage({
                   <div key={group.registration.id}>
                     {/* Registration header row */}
                     <div
-                      className="flex items-center gap-4 px-6 py-4 bg-stone-50/60 cursor-pointer hover:bg-stone-100/60 transition-colors"
+                      className="flex items-start gap-3 px-4 md:px-6 py-4 bg-stone-50/60 cursor-pointer hover:bg-stone-100/60 transition-colors"
                       onClick={() => toggleGroup(group.registration.id)}
                     >
-                      <div className="text-stone-400 shrink-0">
+                      <div className="text-stone-400 shrink-0 pt-1">
                         {isCollapsed ? (
                           <ChevronRight size={16} />
                         ) : (
@@ -391,70 +434,80 @@ export default function RetreatDetailPage({
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setViewingRegistration(group.registration);
-                          }}
-                          className="text-left hover:underline"
-                        >
-                          <span className="font-bold text-stone-900">
-                            {group.registration.contactName}
-                          </span>
-                          <span className="text-stone-400 ml-2 text-sm">
-                            {group.registration.contactEmail}
-                          </span>
-                        </button>
-                      </div>
-                      <span className="text-xs text-stone-500 shrink-0 tabular-nums">
-                        {group.registrants.length}{" "}
-                        {group.registrants.length === 1 ? "person" : "people"}
-                        {groupTotal != null && (
-                          <span className="ml-1 font-bold text-stone-700">
-                            · ${groupTotal}
-                          </span>
-                        )}
-                      </span>
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <Select
-                          value={group.registration.status}
-                          onValueChange={(value) =>
-                            handleStatusUpdate(group.registration.id, value)
-                          }
-                        >
-                          <SelectTrigger
-                            className={`h-auto w-auto gap-1.5 rounded-full border-0 px-3 py-1 text-xs font-bold uppercase tracking-wider shadow-none ${statusColor(group.registration.status)}`}
+                        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewingRegistration(group.registration);
+                            }}
+                            className="text-left hover:underline min-w-0 max-w-full"
                           >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent align="end">
-                            <SelectItem value="pending">Pending</SelectItem>
-                            <SelectItem value="confirmed">Paid</SelectItem>
-                            <SelectItem value="cancelled">Cancelled</SelectItem>
-                            <SelectItem value="waitlisted">
-                              Waitlisted
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
+                            <span className="block font-bold text-stone-900 truncate">
+                              {group.registration.contactName}
+                            </span>
+                            <span className="block text-stone-400 text-sm truncate">
+                              {group.registration.contactEmail}
+                            </span>
+                          </button>
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <Select
+                              value={group.registration.status}
+                              onValueChange={(value) =>
+                                handleStatusUpdate(group.registration.id, value)
+                              }
+                            >
+                              <SelectTrigger
+                                className={`h-auto w-auto gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs font-bold uppercase tracking-wider shadow-none ${statusColor(group.registration.status)}`}
+                              >
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent align="end">
+                                <SelectItem value="pending">Pending</SelectItem>
+                                <SelectItem value="confirmed">Paid</SelectItem>
+                                <SelectItem value="cancelled">
+                                  Cancelled
+                                </SelectItem>
+                                <SelectItem value="waitlisted">
+                                  Waitlisted
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="mt-1.5 flex items-center justify-between gap-3 text-xs text-stone-500 tabular-nums">
+                          <span>
+                            {group.registrants.length}{" "}
+                            {group.registrants.length === 1
+                              ? "person"
+                              : "people"}
+                            {groupTotal != null && (
+                              <span className="ml-1 font-bold text-stone-700">
+                                · ${groupTotal}
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-stone-400">
+                            {new Date(
+                              group.registration.createdAt,
+                            ).toLocaleDateString("en-US", {
+                              timeZone: "America/New_York",
+                            })}
+                          </span>
+                        </div>
                       </div>
-                      <span className="text-xs text-stone-400 shrink-0 w-24 text-right">
-                        {new Date(
-                          group.registration.createdAt,
-                        ).toLocaleDateString('en-US', { timeZone: 'America/New_York' })}
-                      </span>
                     </div>
 
                     {/* Registrant rows */}
                     {!isCollapsed && (
-                      <div>
+                      <div className="overflow-x-auto">
                         <table className="w-full text-left">
                           <thead>
                             <tr className="text-xs font-bold uppercase tracking-widest text-stone-300 border-b border-stone-100">
-                              <th className="pl-16 pr-6 py-2.5">Name</th>
-                              <th className="px-6 py-2.5">Age</th>
-                              <th className="px-6 py-2.5">Type</th>
+                              <th className="pl-11 md:pl-16 pr-3 md:pr-6 py-2.5">Name</th>
+                              <th className="px-3 md:px-6 py-2.5">Age</th>
+                              <th className="px-3 md:px-6 py-2.5">Type</th>
                               {retreat.pricingTiers?.length ? (
-                                <th className="px-6 py-2.5">Price</th>
+                                <th className="px-3 md:px-6 py-2.5">Price</th>
                               ) : null}
                             </tr>
                           </thead>
@@ -469,22 +522,22 @@ export default function RetreatDetailPage({
                                   key={registrant.id}
                                   className="hover:bg-stone-50 transition-colors"
                                 >
-                                  <td className="pl-16 pr-6 py-3">
+                                  <td className="pl-11 md:pl-16 pr-3 md:pr-6 py-3">
                                     <p className="font-medium text-stone-900">
                                       {registrant.firstName}{" "}
                                       {registrant.lastName}
                                     </p>
                                   </td>
-                                  <td className="px-6 py-3 text-stone-600 text-sm">
+                                  <td className="px-3 md:px-6 py-3 text-stone-600 text-sm">
                                     {registrant.age != null
                                       ? registrant.age
                                       : "—"}
                                   </td>
-                                  <td className="px-6 py-3 text-stone-500 text-sm">
+                                  <td className="px-3 md:px-6 py-3 text-stone-500 text-sm">
                                     {registrant.isAdult ? "Adult" : "Child"}
                                   </td>
                                   {retreat.pricingTiers?.length ? (
-                                    <td className="px-6 py-3 font-bold text-stone-900 text-sm">
+                                    <td className="px-3 md:px-6 py-3 font-bold text-stone-900 text-sm">
                                       {tier
                                         ? tier.isFree
                                           ? "Free"
@@ -553,11 +606,11 @@ function RegistrationDetailModal({
       }, 0)
     : null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-stone-900/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-stone-900/80 backdrop-blur-sm">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="p-8">
+        <div className="p-5 sm:p-8">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-3xl font-black tracking-tight text-stone-900">
+            <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-stone-900">
               Registration Details
             </h2>
             <button
@@ -785,11 +838,11 @@ function RetreatFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-stone-900/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-stone-900/80 backdrop-blur-sm">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="p-8">
+        <div className="p-5 sm:p-8">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-3xl font-black tracking-tight text-stone-900">
+            <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-stone-900">
               Edit Retreat
             </h2>
             <button
