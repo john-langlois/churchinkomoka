@@ -222,7 +222,7 @@ export function ProfilesTable({
         <div className="flex gap-2">
           <Button onClick={onAdd} className="flex items-center gap-2">
             <Plus className="h-4 w-4" />
-            Add Profile
+            Add Admin
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

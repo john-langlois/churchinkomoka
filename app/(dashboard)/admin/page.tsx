@@ -841,7 +841,7 @@ export default function AdminPage() {
                     className="flex items-center gap-2 px-4 py-2 bg-stone-900 text-white rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-stone-700 transition-colors"
                   >
                     <Plus size={16} />
-                    Add Profile
+                    Add Admin
                   </button>
                 </div>
                 <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
@@ -1688,13 +1688,13 @@ function ProfileFormModal({ profile, onClose, onSave }: { profile: Profile | nul
     phone: profile?.phone || '',
     firstName: profile?.firstName || '',
     lastName: profile?.lastName || '',
-    avatarUrl: profile?.avatarUrl || '',
-    isAdmin: profile?.isAdmin || false,
+    // New profiles are added from this panel, so they are admins by default
+    isAdmin: profile ? profile.isAdmin : true,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
+    onSave(profile ? formData : { ...formData, isAdmin: true });
   };
 
   return (
@@ -1703,7 +1703,7 @@ function ProfileFormModal({ profile, onClose, onSave }: { profile: Profile | nul
         <div className="p-8">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-3xl font-black tracking-tight text-stone-900">
-              {profile ? 'Edit Profile' : 'Add Profile'}
+              {profile ? 'Edit Profile' : 'Add Admin'}
             </h2>
             <button onClick={onClose} className="p-2 hover:bg-stone-100 rounded-lg transition-colors">
               <X size={24} />
@@ -1722,24 +1722,27 @@ function ProfileFormModal({ profile, onClose, onSave }: { profile: Profile | nul
                 className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none"
               />
             </div>
-            <div>
-              <label className="block text-sm font-bold uppercase tracking-widest text-stone-400 mb-2">
-                Phone
-              </label>
-              <input
-                type="tel"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+            {profile && (
+              <div>
+                <label className="block text-sm font-bold uppercase tracking-widest text-stone-400 mb-2">
+                  Phone
+                </label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none"
+                />
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-bold uppercase tracking-widest text-stone-400 mb-2">
                   First Name
                 </label>
                 <input
                   type="text"
+                  required={!profile}
                   value={formData.firstName}
                   onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                   className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none"
@@ -1757,17 +1760,7 @@ function ProfileFormModal({ profile, onClose, onSave }: { profile: Profile | nul
                 />
               </div>
             </div>
-            <div>
-              <label className="block text-sm font-bold uppercase tracking-widest text-stone-400 mb-2">
-                Avatar URL
-              </label>
-              <input
-                type="url"
-                value={formData.avatarUrl}
-                onChange={(e) => setFormData({ ...formData, avatarUrl: e.target.value })}
-                className="w-full px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:ring-2 focus:ring-stone-900 focus:border-transparent outline-none"
-              />
-            </div>
+            {profile && (
             <div>
               <label className="flex items-center gap-2">
                 <input
@@ -1781,6 +1774,7 @@ function ProfileFormModal({ profile, onClose, onSave }: { profile: Profile | nul
                 </span>
               </label>
             </div>
+            )}
             <div className="flex gap-4">
               <button
                 type="submit"

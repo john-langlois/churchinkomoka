@@ -26,7 +26,8 @@ const createProfileSchema = z.object({
   phone: z.string().optional().nullable(),
   firstName: z.string().optional().nullable(),
   lastName: z.string().optional().nullable(),
-  avatarUrl: z.string().url().optional().nullable(),
+  // Blank means no avatar
+  avatarUrl: z.union([z.string().url(), z.literal('')]).optional().nullable(),
   isAdmin: z.boolean().default(false),
 });
 
