@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Usage: node .claude/skills/ingest-sermon/ingest.mjs <youtube-url> --speaker "Name" [--title "T"] [--date YYYY-MM-DD] [--publish]
+// Usage: node .claude/skills/ingest-sermon/ingest.mjs <youtube-url> --speaker "Name" [--title "T"] [--date YYYY-MM-DD] [--publish] [--dry-run]
 // Self-contained: needs only Node 18+ and yt-dlp on PATH. Run from anywhere.
 //
 // Env (shell, ./.env.local, or ~/.ingest-sermon.env): BLOB_READ_WRITE_TOKEN,
 // SERMON_INGEST_TOKEN, SITE_URL (default https://churchinkomoka.com)
 
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join, basename } from 'node:path';
 
@@ -27,12 +27,13 @@ const flag = (n) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 const publish = args.includes('--publish');
+const dryRun = args.includes('--dry-run'); // download + parse only; no tokens, no upload
 const speaker = flag('speaker');
 if (!url || !speaker) {
   console.error('Usage: ingest.mjs <youtube-url> --speaker "Name" [--title T] [--date YYYY-MM-DD] [--publish]');
   process.exit(2);
 }
-for (const k of ['BLOB_READ_WRITE_TOKEN', 'SERMON_INGEST_TOKEN']) {
+for (const k of dryRun ? [] : ['BLOB_READ_WRITE_TOKEN', 'SERMON_INGEST_TOKEN']) {
   if (!process.env[k]) {
     console.error(`Missing ${k}`);
     process.exit(2);
@@ -50,17 +51,25 @@ const title = flag('title') || meta.title;
 const ud = meta.upload_date; // YYYYMMDD
 const date = flag('date') || (ud ? `${ud.slice(0, 4)}-${ud.slice(4, 6)}-${ud.slice(6)}` : undefined);
 
-console.log('→ Downloading audio + captions…');
-run([
-  '--no-playlist',
-  '-f', 'bestaudio[ext=m4a]/bestaudio',
-  '--write-subs', '--write-auto-subs', '--sub-langs', 'en.*', '--sub-format', 'vtt',
-  '-o', join(dir, 'sermon.%(ext)s'),
-  url,
-]);
+console.log('→ Downloading audio…');
+run(['--no-playlist', '-f', 'bestaudio[ext=m4a]/bestaudio', '-o', join(dir, 'sermon.%(ext)s'), url]);
+
+// Captions are best-effort: only plain English tracks (not auto-translations, which
+// YouTube rate-limits), and any failure just means the server transcribes the audio.
+console.log('→ Fetching captions…');
+try {
+  run([
+    '--no-playlist', '--skip-download',
+    '--write-subs', '--write-auto-subs', '--sub-langs', 'en,en-orig', '--sub-format', 'vtt',
+    '-o', join(dir, 'sermon.%(ext)s'),
+    url,
+  ]);
+} catch (err) {
+  console.warn(`  (captions unavailable: ${String(err.stderr || err.message).split('\n')[0].slice(0, 120)})`);
+}
 const files = readdirSync(dir);
 const audioFile = files.find((f) => /\.(m4a|mp3|webm|ogg|opus)$/.test(f));
-const vttFile = files.find((f) => f.endsWith('.vtt'));
+const vttFile = files.find((f) => f === 'sermon.en.vtt') || files.find((f) => f.endsWith('.vtt'));
 if (!audioFile) throw new Error('yt-dlp produced no audio file');
 
 // ── 2. VTT → plain text (rolling auto-captions repeat lines) ────────────────
@@ -78,6 +87,16 @@ if (vttFile) {
   console.log(`→ Captions found (${transcript.length} chars).`);
 } else {
   console.log('→ No captions; server will transcribe the audio instead.');
+}
+
+if (dryRun) {
+  console.log(JSON.stringify({
+    dryRun: true, title, speaker, date,
+    audioFile, audioBytes: statSync(join(dir, audioFile)).size,
+    captions: transcript ? { chars: transcript.length, preview: transcript.slice(0, 300) } : null,
+    dir,
+  }, null, 2));
+  process.exit(0);
 }
 
 // ── 3. upload audio to Vercel Blob ──────────────────────────────────────────
