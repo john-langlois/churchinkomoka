@@ -21,7 +21,6 @@ import {
   Plane,
   ClipboardCheck,
 } from "lucide-react";
-import BackgroundPlayer from "next-video/background-player";
 import { SectionHeader } from "@/src/components/SectionHeader";
 import { Calendar } from "@/src/components/ui/calendar";
 import {
@@ -466,9 +465,16 @@ function RetreatPageContent() {
               {/* Hero card */}
               <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-stone-100">
                 <div className="aspect-[3/1] relative overflow-hidden">
-                  <BackgroundPlayer
-                    src="/videos/Fly_Out_Edited.mp4"
-                    className="absolute inset-0 w-full h-full"
+                  <video
+                    src="/videos/fly-out.mp4"
+                    poster="/videos/fly-out-poster.jpg"
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    aria-hidden="true"
+                    className="absolute inset-0 w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent z-10" />
                   <div className="absolute bottom-0 left-0 p-8 md:p-12 z-10">

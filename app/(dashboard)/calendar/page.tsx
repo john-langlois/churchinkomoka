@@ -1,5 +1,8 @@
 import type { Metadata } from 'next';
 import CalendarPage from './CalendarClient';
+import { getUpcomingEvents } from '@/src/services/eventService';
+
+export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: 'Events & Calendar',
@@ -14,4 +17,7 @@ export const metadata: Metadata = {
   },
 };
 
-export default CalendarPage;
+export default async function Page() {
+  const events = await getUpcomingEvents(undefined, { throwOnError: true });
+  return <CalendarPage initialEvents={JSON.parse(JSON.stringify(events))} />;
+}

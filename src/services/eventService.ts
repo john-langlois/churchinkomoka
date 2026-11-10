@@ -189,7 +189,10 @@ export async function getAllEvents(): Promise<Event[]> {
 /**
  * Get upcoming events (next N events)
  */
-export async function getUpcomingEvents(limit?: number): Promise<EventForDisplay[]> {
+export async function getUpcomingEvents(
+  limit?: number,
+  opts?: { throwOnError?: boolean },
+): Promise<EventForDisplay[]> {
   try {
     const allEvents = await db
       .select()
@@ -238,6 +241,7 @@ export async function getUpcomingEvents(limit?: number): Promise<EventForDisplay
     return limit ? eventsForDisplay.slice(0, limit) : eventsForDisplay;
   } catch (error) {
     console.error('Error in getUpcomingEvents:', error);
+    if (opts?.throwOnError) throw error;
     return [];
   }
 }

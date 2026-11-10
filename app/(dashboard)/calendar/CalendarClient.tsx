@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X, Clock, MapPin, Calendar as CalendarIcon, Check } from 'lucide-react';
 import { format, isSameDay, parseISO } from 'date-fns';
@@ -67,9 +67,9 @@ type EventForDisplay = {
 
 type EventCategory = 'All' | 'Service' | 'Prayer' | 'Retreat' | 'Bible Study' | 'Outreach';
 
-export default function CalendarPage() {
-  const [events, setEvents] = useState<EventForDisplay[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function CalendarPage({ initialEvents }: { initialEvents: EventForDisplay[] }) {
+  const events = initialEvents;
+  const loading = false;
   const [selectedEvent, setSelectedEvent] = useState<EventForDisplay | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<EventCategory>('All');
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
@@ -77,23 +77,6 @@ export default function CalendarPage() {
   const [sendingICS, setSendingICS] = useState(false);
   const [icsSent, setIcsSent] = useState(false);
   const [showEmailInput, setShowEmailInput] = useState(false);
-
-  useEffect(() => {
-    fetchEvents();
-  }, []);
-
-  const fetchEvents = async () => {
-    try {
-      const res = await fetch('/api/events/upcoming');
-      const data = await res.json();
-      // Events are already sorted by next occurrence (closest to farthest) from the API
-      setEvents(data.events || []);
-    } catch (error) {
-      console.error('Error fetching events:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Mark calendar dots — recurring events get dots on every future occurrence up to 6 months out
   const eventDates = useMemo(() => {

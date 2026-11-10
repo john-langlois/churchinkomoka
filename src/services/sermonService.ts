@@ -23,7 +23,7 @@ export async function getAllSermons(): Promise<Sermon[]> {
 /**
  * Get only public sermons
  */
-export async function getPublicSermons(): Promise<Sermon[]> {
+export async function getPublicSermons(opts?: { throwOnError?: boolean }): Promise<Sermon[]> {
   try {
     const publicSermons = await db
       .select()
@@ -34,6 +34,7 @@ export async function getPublicSermons(): Promise<Sermon[]> {
     return publicSermons;
   } catch (error) {
     console.error('Error in getPublicSermons:', error);
+    if (opts?.throwOnError) throw error;
     return [];
   }
 }

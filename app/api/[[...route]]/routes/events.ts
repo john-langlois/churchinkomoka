@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { revalidateEvents } from '@/src/lib/revalidate';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { auth } from '@/auth';
@@ -137,6 +138,7 @@ const events = new Hono()
         return c.json({ error: result.error || 'Failed to create event' }, 500);
       }
 
+      revalidateEvents();
       return c.json({ 
         event: result.event,
         message: 'Event created successfully' 
@@ -176,6 +178,7 @@ const events = new Hono()
         return c.json({ error: result.error || 'Failed to update event' }, 500);
       }
 
+      revalidateEvents();
       return c.json({ 
         event: result.event,
         message: 'Event updated successfully' 
@@ -195,6 +198,7 @@ const events = new Hono()
       return c.json({ error: result.error || 'Failed to delete event' }, 500);
     }
 
+    revalidateEvents();
     return c.json({ message: 'Event deleted successfully' });
   });
 
