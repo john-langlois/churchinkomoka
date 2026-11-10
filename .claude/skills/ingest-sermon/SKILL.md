@@ -14,11 +14,11 @@ Runs on the user's own machine (YouTube blocks cloud IPs). It extracts audio and
 
 ## Steps
 1. Get from the user: the YouTube URL and the **speaker name** (required). Title and date default to the video's.
-2. Run it as a **draft** first:
+2. Run it as a **draft** first (`<this-skill-folder>` is wherever this skill is installed, e.g. `~/.claude/skills/ingest-sermon`):
    ```bash
    node <this-skill-folder>/ingest.mjs "<url>" --speaker "<name>" [--title "<t>"] [--date YYYY-MM-DD]
    ```
 3. Show the user the returned `pageUrl` and `podcastDescription`. The draft is private (not public, not in the feed) so they can review and edit it in `/admin`.
-4. Only when the user approves, publish by toggling visibility in `/admin` (the episode is already flagged for the feed, and `/api/podcast` is generated live from the DB, so page and episode go live together). (`<this-skill-folder>` is wherever this skill is installed, e.g. `~/.claude/skills/ingest-sermon`.) `--publish` does the same at ingest time and also refreshes the `podcast/feed.xml` Blob copy.
+4. Only when the user approves, publish by toggling visibility in `/admin` (the episode is already flagged for the feed, and `/api/podcast` is generated live from the DB, so page and episode go live together). `--publish` does the same at ingest time and also refreshes the `podcast/feed.xml` Blob copy.
 
 Do not pass `--publish` on the first run unless the user explicitly asks to publish immediately. Never print the tokens.
