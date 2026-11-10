@@ -13,7 +13,7 @@
 //       draft (or public + in the podcast feed with --publish).
 //
 // Env for `publish` (shell, ./.env.local, or ~/.ingest-sermon.env):
-//   BLOB_READ_WRITE_TOKEN, SERMON_INGEST_TOKEN, SITE_URL (default https://churchinkomoka.com)
+//   BLOB_READ_WRITE_TOKEN, SERMON_INGEST_TOKEN, SITE_URL (default https://www.churchinkomoka.com)
 
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
@@ -126,7 +126,7 @@ async function publish() {
   for (const k of ['BLOB_READ_WRITE_TOKEN', 'SERMON_INGEST_TOKEN']) {
     if (!process.env[k]) die(`Missing ${k} (set it in ~/.ingest-sermon.env)`, 2);
   }
-  const site = (process.env.SITE_URL || 'https://churchinkomoka.com').replace(/\/$/, '');
+  const site = (process.env.SITE_URL || 'https://www.churchinkomoka.com').replace(/\/$/, '');
 
   const slug = meta.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
   const ext = meta.audioFile.split('.').pop();
