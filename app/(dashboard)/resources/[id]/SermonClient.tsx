@@ -20,19 +20,18 @@ type Sermon = {
 
 export default function SermonDetailPage({
   params,
+  initialSermon,
 }: {
   params: Promise<{ id: string }>;
+  /** Server-rendered public sermon. Null for drafts/missing, which fall back to a client fetch (admin preview). */
+  initialSermon: Sermon | null;
 }) {
   const { id } = use(params);
-  const [sermon, setSermon] = useState<Sermon | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [sermon, setSermon] = useState<Sermon | null>(initialSermon);
+  const [loading, setLoading] = useState(!initialSermon);
 
   useEffect(() => {
-    fetchSermon();
-  }, [id]);
-
-  useEffect(() => { 
-    window.scrollTo(0, 0); 
+    if (!initialSermon) fetchSermon();
   }, [id]);
 
   const fetchSermon = async () => {

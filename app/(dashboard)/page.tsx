@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Clock,
   ArrowRight,
@@ -151,10 +152,16 @@ export default function HomePage() {
     <div className="min-h-screen bg-stone-50">
       {/* Hero Section — h-svh so mobile fits in viewport; content contained to width */}
       <div className="relative h-svh min-h-[480px] w-full overflow-hidden">
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: `url('/images/hero_1.png')` }}
-        >
+        <div className="absolute inset-0">
+          <Image
+            src="/images/hero_1.png"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            quality={70}
+            className="object-cover object-center"
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-stone-900 via-stone-900/80 to-stone-900/60" />
         </div>
 
@@ -405,10 +412,15 @@ export default function HomePage() {
               transition={{ delay: idx * 0.1 }}
               className="group cursor-default relative aspect-[4/3] border border-stone-300 rounded-lg overflow-hidden"
             >
-              <div
-                className="absolute inset-0 bg-cover bg-center"
-                style={{ backgroundImage: `url(${item.image})` }}
-              >
+              <div className="absolute inset-0">
+                <Image
+                  src={item.image}
+                  alt=""
+                  fill
+                  sizes="(min-width: 768px) 33vw, 100vw"
+                  quality={70}
+                  className="object-cover object-center"
+                />
                 <div className="absolute inset-0 bg-stone-900/60 group-hover:bg-stone-900/70 transition-colors duration-300" />
               </div>
               <div className="absolute inset-0 flex flex-col justify-end p-6 md:p-8 z-10">

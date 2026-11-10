@@ -11,6 +11,7 @@ import {
   deleteSermon,
   toggleSermonVisibility,
 } from '@/src/services/sermonService';
+import { revalidateSermons } from '@/src/lib/revalidate';
 
 // Helper to check if user is admin from request headers
 async function checkAdminFromRequest(request: Request): Promise<boolean> {
@@ -100,6 +101,7 @@ const sermons = new Hono()
         return c.json({ error: result.error || 'Failed to create sermon' }, 500);
       }
 
+    revalidateSermons();
       return c.json({ 
         sermon: result.sermon,
         message: 'Sermon created successfully' 
@@ -134,6 +136,7 @@ const sermons = new Hono()
         return c.json({ error: result.error || 'Failed to update sermon' }, 500);
       }
 
+    revalidateSermons();
       return c.json({ 
         sermon: result.sermon,
         message: 'Sermon updated successfully' 
@@ -153,6 +156,7 @@ const sermons = new Hono()
       return c.json({ error: result.error || 'Failed to toggle visibility' }, 500);
     }
 
+    revalidateSermons();
     return c.json({ 
       sermon: result.sermon,
       message: 'Visibility toggled successfully' 
@@ -171,6 +175,7 @@ const sermons = new Hono()
       return c.json({ error: result.error || 'Failed to delete sermon' }, 500);
     }
 
+    revalidateSermons();
     return c.json({ message: 'Sermon deleted successfully' });
   });
 

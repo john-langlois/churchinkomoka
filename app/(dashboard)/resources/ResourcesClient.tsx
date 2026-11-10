@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { Music, ChevronRight, Search, X } from 'lucide-react';
 import { SpotifyIcon } from '@/src/components/SpotifyIcon';
@@ -28,28 +28,11 @@ type Sermon = {
   isPublic: boolean;
 };
 
-export default function ResourcesPage() {
-  const [sermons, setSermons] = useState<Sermon[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function ResourcesPage({ initialSermons }: { initialSermons: Sermon[] }) {
+  const sermons = initialSermons;
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSpeaker, setSelectedSpeaker] = useState<string>('all');
   const [contentType, setContentType] = useState<string>('all');
-
-  useEffect(() => {
-    fetchSermons();
-  }, []);
-
-  const fetchSermons = async () => {
-    try {
-      const res = await fetch('/api/sermons');
-      const data = await res.json();
-      setSermons(data.sermons || []);
-    } catch (error) {
-      console.error('Error fetching sermons:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Get unique speakers
   const speakers = useMemo(() => {
@@ -147,9 +130,7 @@ export default function ResourcesPage() {
            </Select>
          </div>
 
-         {loading ? (
-           <p className="text-stone-500 text-center py-8">Loading sermons...</p>
-         ) : filteredSermons.length > 0 ? (
+         {filteredSermons.length > 0 ? (
            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {filteredSermons.map((sermon) => (
                 <Link key={sermon.id} href={`/resources/${sermon.id}`} className="group bg-white rounded-2xl overflow-hidden border border-stone-100 shadow-sm hover:shadow-xl transition-all duration-300">

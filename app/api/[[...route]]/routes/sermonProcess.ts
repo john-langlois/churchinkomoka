@@ -7,6 +7,7 @@ import { fetchYouTubeMeta } from '@/src/services/youtubeService';
 import { timingSafeEqual } from 'node:crypto';
 import { transcribeAndRewrite, rewriteFromTranscript } from '@/src/services/geminiService';
 import { createSermon } from '@/src/services/sermonService';
+import { revalidateSermons } from '@/src/lib/revalidate';
 import { regeneratePodcastFeed } from '@/src/services/rssService';
 
 const LOGO_PATH = '/images/CHURCH IN KOMOKA.png';
@@ -126,6 +127,7 @@ const sermonProcess = new Hono()
         return c.json({ error: created.error ?? 'Failed to save sermon' }, 500);
       }
 
+      revalidateSermons();
       const rssUrl = body.publish ? await regeneratePodcastFeed() : null;
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://churchinkomoka.com';
       return c.json({
@@ -243,6 +245,7 @@ const sermonProcess = new Hono()
         return c.json({ error: result.error ?? 'Failed to save sermon' }, 500);
       }
 
+      revalidateSermons();
       const rssUrl = await regeneratePodcastFeed();
 
       return c.json({

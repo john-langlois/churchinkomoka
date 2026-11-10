@@ -1,5 +1,13 @@
 import type { Metadata } from 'next';
 import SermonDetailPage from './SermonClient';
+import { getSermonById } from '@/src/services/sermonService';
+
+export const revalidate = 3600;
+
+// No pages at build time; each sermon is rendered on first request, then cached (ISR).
+export async function generateStaticParams() {
+  return [];
+}
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -9,33 +17,26 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
 
   try {
-    const res = await fetch(`https://churchinkomoka.com/api/sermons/${id}`, {
-      next: { revalidate: 3600 },
-    });
+    const sermon = await getSermonById(id);
 
-    if (res.ok) {
-      const data = await res.json();
-      const sermon = data.sermon;
+    if (sermon?.isPublic) {
+      const description = sermon.articleContent
+        ? sermon.articleContent.replace(/[#*_`>\[\]]/g, '').trim().slice(0, 160)
+        : `A sermon by ${sermon.speaker} — listen on Spotify, watch on YouTube, or read along at Church in Komoka.`;
 
-      if (sermon) {
-        const description = sermon.articleContent
-          ? sermon.articleContent.replace(/[#*_`>\[\]]/g, '').trim().slice(0, 160)
-          : `A sermon by ${sermon.speaker} — listen on Spotify, watch on YouTube, or read along at Church in Komoka.`;
-
-        return {
-          title: sermon.title,
+      return {
+        title: sermon.title,
+        description,
+        alternates: {
+          canonical: `https://churchinkomoka.com/resources/${id}`,
+        },
+        openGraph: {
+          title: `${sermon.title} — Church in Komoka`,
           description,
-          alternates: {
-            canonical: `https://churchinkomoka.com/resources/${id}`,
-          },
-          openGraph: {
-            title: `${sermon.title} — Church in Komoka`,
-            description,
-            url: `https://churchinkomoka.com/resources/${id}`,
-            type: 'article',
-          },
-        };
-      }
+          url: `https://churchinkomoka.com/resources/${id}`,
+          type: 'article',
+        },
+      };
     }
   } catch {
     // Fall through to default
@@ -47,6 +48,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default function Page({ params }: Props) {
-  return <SermonDetailPage params={params} />;
+export default async function Page({ params }: Props) {
+  const { id } = await params;
+  const sermon = await getSermonById(id).catch(() => null);
+  const initialSermon =
+    sermon?.isPublic
+      ? {
+          id: sermon.id,
+          title: sermon.title,
+          speaker: sermon.speaker ?? '',
+          date: sermon.date ?? '',
+          youtubeId: sermon.youtubeId ?? undefined,
+          spotifyLink: sermon.spotifyLink ?? undefined,
+          articleContent: sermon.articleContent ?? undefined,
+        }
+      : null;
+  return <SermonDetailPage params={params} initialSermon={initialSermon} />;
 }
