@@ -5,7 +5,7 @@ import { streamSSE, type SSEStreamingApi } from 'hono/streaming';
 import { auth } from '@/auth';
 import { fetchYouTubeMeta } from '@/src/services/youtubeService';
 import { timingSafeEqual } from 'node:crypto';
-import { transcribeAndRewrite, rewriteFromTranscript } from '@/src/services/geminiService';
+import { transcribeAndRewrite } from '@/src/services/geminiService';
 import { createSermon } from '@/src/services/sermonService';
 import { revalidateSermons } from '@/src/lib/revalidate';
 import { regeneratePodcastFeed } from '@/src/services/rssService';
@@ -67,9 +67,8 @@ const ingestSchema = z.object({
   speaker: z.string().min(1),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   audioUrl: z.string().url(),
-  audioMimeType: z.string().default('audio/mp4'),
-  /** Plain-text captions. If omitted, the audio is transcribed instead. */
-  transcript: z.string().optional(),
+  /** Markdown article, already written (and reviewed) by the ingest-sermon skill. */
+  articleContent: z.string().min(200),
   /** true → public immediately and feed blob regenerated. Default: private draft. */
   publish: z.boolean().default(false),
 });
@@ -81,8 +80,9 @@ const sermonProcess = new Hono()
   /**
    * POST /api/sermons/ingest
    * Used by the `ingest-sermon` skill. Authenticated with SERMON_INGEST_TOKEN.
-   * Summarises the transcript (or transcribes the audio), saves the sermon as
-   * a draft, and optionally publishes it and regenerates the podcast feed.
+   * The article is written and reviewed in Claude Code, so no AI runs here: this
+   * just saves the sermon (private draft by default) and, if `publish`, makes it
+   * public and regenerates the podcast feed blob.
    */
   .post('/ingest', zValidator('json', ingestSchema), async (c) => {
     if (!checkIngestToken(c.req.header('Authorization'))) {
@@ -91,31 +91,13 @@ const sermonProcess = new Hono()
     const body = c.req.valid('json');
 
     try {
-      let result;
-      if (body.transcript && body.transcript.trim().length > 200) {
-        result = await rewriteFromTranscript(body.transcript, body.title);
-      } else {
-        const res = await fetch(body.audioUrl);
-        if (!res.ok) return c.json({ error: 'Could not fetch audio' }, 400);
-        const buf = Buffer.from(await res.arrayBuffer());
-        result = await transcribeAndRewrite(
-          buf,
-          body.audioUrl.split('/').pop() ?? 'sermon.m4a',
-          body.title,
-          body.audioMimeType,
-        );
-      }
-      if (!result.articleContent) {
-        return c.json({ error: 'Gemini returned an empty article' }, 502);
-      }
-
       const created = await createSermon({
         title: body.title,
         speaker: body.speaker,
         date: body.date ?? null,
         youtubeId: body.youtubeUrl,
         spotifyLink: null,
-        articleContent: result.articleContent,
+        articleContent: body.articleContent,
         thumbnailUrl: LOGO_PATH,
         audioUrl: body.audioUrl,
         isPublic: body.publish,
@@ -135,7 +117,7 @@ const sermonProcess = new Hono()
         sermonId: created.sermon.id,
         published: body.publish,
         pageUrl: `${appUrl}/resources/${created.sermon.id}`,
-        podcastDescription: result.podcastDescription,
+        adminUrl: `${appUrl}/admin`,
         rssUrl,
       });
     } catch (err) {
