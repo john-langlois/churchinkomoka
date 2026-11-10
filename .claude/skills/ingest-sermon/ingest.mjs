@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 // Usage: node .claude/skills/ingest-sermon/ingest.mjs <youtube-url> --speaker "Name" [--title "T"] [--date YYYY-MM-DD] [--publish]
-// Run from the repo root (needs @vercel/blob from node_modules). Requires yt-dlp on PATH.
+// Self-contained: needs only Node 18+ and yt-dlp on PATH. Run from anywhere.
 //
-// Env (read from the shell or .env.local): BLOB_READ_WRITE_TOKEN, SERMON_INGEST_TOKEN,
-// SITE_URL (default https://churchinkomoka.com)
+// Env (shell, ./.env.local, or ~/.ingest-sermon.env): BLOB_READ_WRITE_TOKEN,
+// SERMON_INGEST_TOKEN, SITE_URL (default https://churchinkomoka.com)
 
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, readFileSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { join, basename } from 'node:path';
 
 // ── tiny .env.local loader (no dependency) ──────────────────────────────────
-for (const f of ['.env.local', '.env']) {
+for (const f of ['.env.local', '.env', join(homedir(), '.ingest-sermon.env')]) {
   if (!existsSync(f)) continue;
   for (const line of readFileSync(f, 'utf8').split('\n')) {
     const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*"?([^"\n]*)"?\s*$/);
@@ -81,16 +81,27 @@ if (vttFile) {
 }
 
 // ── 3. upload audio to Vercel Blob ──────────────────────────────────────────
-const { put } = await import('@vercel/blob');
 const ext = audioFile.split('.').pop();
 const mime = { m4a: 'audio/mp4', mp3: 'audio/mpeg', webm: 'audio/webm', ogg: 'audio/ogg', opus: 'audio/ogg' }[ext] ?? 'audio/mp4';
 const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
 console.log('→ Uploading audio to Blob…');
-const blob = await put(`sermons/audio/${date ?? 'undated'}-${slug}.${ext}`, readFileSync(join(dir, audioFile)), {
-  access: 'public',
-  contentType: mime,
-  addRandomSuffix: true,
+// Vercel Blob REST API (no SDK needed).
+const blobPath = `sermons/audio/${date ?? 'undated'}-${slug}.${ext}`;
+const up = await fetch(`https://blob.vercel-storage.com/${blobPath.split('/').map(encodeURIComponent).join('/')}`, {
+  method: 'PUT',
+  headers: {
+    Authorization: `Bearer ${process.env.BLOB_READ_WRITE_TOKEN}`,
+    'x-api-version': '7',
+    'x-content-type': mime,
+    'x-add-random-suffix': '1',
+  },
+  body: readFileSync(join(dir, audioFile)),
 });
+if (!up.ok) {
+  console.error('Blob upload failed:', up.status, await up.text());
+  process.exit(1);
+}
+const blob = await up.json();
 
 // ── 4. hand off to the site ─────────────────────────────────────────────────
 console.log(`→ Summarising and saving as ${publish ? 'PUBLISHED' : 'draft'}…`);
