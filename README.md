@@ -132,3 +132,7 @@ This application was migrated from a Vite + React SPA to Next.js 16. All existin
 ## License
 
 Private - Church in Komoka
+
+## Sermon ingestion (YouTube → page + podcast)
+
+The `ingest-sermon` Claude Code skill (`.claude/skills/ingest-sermon`) turns a YouTube URL into a draft sermon page and podcast episode. Set `SERMON_INGEST_TOKEN` (any long random string) and `GOOGLE_API_KEY` in the deployed environment, and `BLOB_READ_WRITE_TOKEN` + `SERMON_INGEST_TOKEN` locally. Requires `yt-dlp` locally.

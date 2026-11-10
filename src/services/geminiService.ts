@@ -65,6 +65,53 @@ async function uploadAudioToGemini(
 }
 
 /**
+ * Rewrite an existing text transcript (e.g. YouTube captions) as a pastoral
+ * article and generate a podcast description. Text-only, so it is much
+ * cheaper and faster than transcribing audio.
+ */
+export async function rewriteFromTranscript(
+  transcript: string,
+  sermonTitle: string,
+): Promise<TranscriptionResult> {
+  const articleResponse = await ai.models.generateContent({
+    model: "gemini-3.1-flash-lite-preview",
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: `Sermon title: "${sermonTitle}"\n\n${TRANSCRIPTION_SYSTEM_PROMPT.replace(
+              "transcribe the provided audio sermon and rewrite it",
+              "rewrite the provided raw sermon transcript (auto-captions, may contain errors in names and scripture references)",
+            )}\n\nTranscript:\n${transcript}`,
+          },
+        ],
+      },
+    ],
+  });
+  const articleContent =
+    articleResponse.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+
+  const descriptionResponse = await ai.models.generateContent({
+    model: "gemini-3.1-flash-lite-preview",
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: `${DESCRIPTION_SYSTEM_PROMPT}\n\nSermon title: "${sermonTitle}"\n\nArticle content:\n${articleContent.slice(0, 2000)}`,
+          },
+        ],
+      },
+    ],
+  });
+  const podcastDescription =
+    descriptionResponse.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+
+  return { articleContent, podcastDescription };
+}
+
+/**
  * Transcribe the sermon audio and rewrite it as a pastoral article.
  * Also generates a short podcast episode description.
  */

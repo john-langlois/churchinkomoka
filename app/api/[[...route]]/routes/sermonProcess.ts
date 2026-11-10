@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { streamSSE, type SSEStreamingApi } from 'hono/streaming';
 import { auth } from '@/auth';
 import { fetchYouTubeMeta } from '@/src/services/youtubeService';
-import { transcribeAndRewrite } from '@/src/services/geminiService';
+import { timingSafeEqual } from 'node:crypto';
+import { transcribeAndRewrite, rewriteFromTranscript } from '@/src/services/geminiService';
 import { createSermon } from '@/src/services/sermonService';
 import { regeneratePodcastFeed } from '@/src/services/rssService';
 
@@ -50,9 +51,96 @@ const confirmSchema = z.object({
 });
 
 
+/** Bearer-token auth for the local ingest-sermon skill (no browser session). */
+function checkIngestToken(authHeader: string | undefined): boolean {
+  const expected = process.env.SERMON_INGEST_TOKEN;
+  if (!expected || !authHeader?.startsWith('Bearer ')) return false;
+  const given = Buffer.from(authHeader.slice(7));
+  const want = Buffer.from(expected);
+  return given.length === want.length && timingSafeEqual(given, want);
+}
+
+const ingestSchema = z.object({
+  youtubeUrl: z.string().url(),
+  title: z.string().min(1),
+  speaker: z.string().min(1),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  audioUrl: z.string().url(),
+  audioMimeType: z.string().default('audio/mp4'),
+  /** Plain-text captions. If omitted, the audio is transcribed instead. */
+  transcript: z.string().optional(),
+  /** true → public immediately and feed blob regenerated. Default: private draft. */
+  publish: z.boolean().default(false),
+});
+
 // ─── Routes ────────────────────────────────────────────────────────────────
 
 const sermonProcess = new Hono()
+
+  /**
+   * POST /api/sermons/ingest
+   * Used by the `ingest-sermon` skill. Authenticated with SERMON_INGEST_TOKEN.
+   * Summarises the transcript (or transcribes the audio), saves the sermon as
+   * a draft, and optionally publishes it and regenerates the podcast feed.
+   */
+  .post('/ingest', zValidator('json', ingestSchema), async (c) => {
+    if (!checkIngestToken(c.req.header('Authorization'))) {
+      return c.json({ error: 'Unauthorized' }, 401);
+    }
+    const body = c.req.valid('json');
+
+    try {
+      let result;
+      if (body.transcript && body.transcript.trim().length > 200) {
+        result = await rewriteFromTranscript(body.transcript, body.title);
+      } else {
+        const res = await fetch(body.audioUrl);
+        if (!res.ok) return c.json({ error: 'Could not fetch audio' }, 400);
+        const buf = Buffer.from(await res.arrayBuffer());
+        result = await transcribeAndRewrite(
+          buf,
+          body.audioUrl.split('/').pop() ?? 'sermon.m4a',
+          body.title,
+          body.audioMimeType,
+        );
+      }
+      if (!result.articleContent) {
+        return c.json({ error: 'Gemini returned an empty article' }, 502);
+      }
+
+      const created = await createSermon({
+        title: body.title,
+        speaker: body.speaker,
+        date: body.date ?? null,
+        youtubeId: body.youtubeUrl,
+        spotifyLink: null,
+        articleContent: result.articleContent,
+        thumbnailUrl: LOGO_PATH,
+        audioUrl: body.audioUrl,
+        isPublic: body.publish,
+        // Flagged for the feed up front; the feed only lists public sermons,
+        // so toggling visibility in /admin publishes page + episode together.
+        inPodcastFeed: true,
+      });
+      if (!created.success || !created.sermon) {
+        return c.json({ error: created.error ?? 'Failed to save sermon' }, 500);
+      }
+
+      const rssUrl = body.publish ? await regeneratePodcastFeed() : null;
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://churchinkomoka.com';
+      return c.json({
+        success: true,
+        sermonId: created.sermon.id,
+        published: body.publish,
+        pageUrl: `${appUrl}/resources/${created.sermon.id}`,
+        podcastDescription: result.podcastDescription,
+        rssUrl,
+      });
+    } catch (err) {
+      console.error('[ingest] error:', err);
+      return c.json({ error: err instanceof Error ? err.message : 'Ingest failed' }, 500);
+    }
+  })
 
   /**
    * POST /api/sermons/process
